@@ -1,5 +1,6 @@
-rom dash.dependencies import Input, Output, State
+from dash.dependencies import Input, Output
 import plotly.express as px
+
 
 def register_callbacks(app, data_dict):
     @app.callback(
@@ -8,7 +9,8 @@ def register_callbacks(app, data_dict):
          Input('yaxis-column', 'value'),
          Input('attendance-dropdown', 'value')]
     )
-    def update_main_graph(xaxis_column_name, yaxis_column_name, attendance_number):
+    def update_main_graph(xaxis_column_name,
+                          yaxis_column_name, attendance_number):
         data = data_dict[attendance_number]
         fig = px.scatter(data, x=xaxis_column_name, y=yaxis_column_name,
                          hover_data=['object', 'result', 'extension'])
@@ -30,9 +32,11 @@ def register_callbacks(app, data_dict):
          Input('yaxis-column', 'value'),
          Input('attendance-dropdown', 'value')]
     )
-    def update_individual_graph(selected_object, xaxis_column_name, yaxis_column_name, attendance_number):
+    def update_individual_graph(selected_object, xaxis_column_name,
+                                yaxis_column_name, attendance_number):
         data = data_dict[attendance_number]
         filtered_data = data[data['object'] == selected_object]
-        fig = px.scatter(filtered_data, x=xaxis_column_name, y=yaxis_column_name,
+        fig = px.scatter(filtered_data, x=xaxis_column_name,
+                         y=yaxis_column_name,
                          hover_data=['object', 'result', 'extension'])
         return fig
