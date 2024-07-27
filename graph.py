@@ -1,42 +1,36 @@
 from dash.dependencies import Input, Output
 import plotly.express as px
+from dash import html, dcc
+import pandas as pd
 
 
 def register_callbacks(app, data_dict):
     @app.callback(
         Output('main-graph', 'figure'),
-        [Input('xaxis-column', 'value'),
-         Input('yaxis-column', 'value'),
-         Input('attendance-dropdown', 'value')]
+        [Input('data-dropdown', 'value')]
     )
-    def update_main_graph(xaxis_column_name,
-                          yaxis_column_name, attendance_number):
-        data = data_dict[attendance_number]
-        fig = px.scatter(data, x=xaxis_column_name, y=yaxis_column_name,
-                         hover_data=['object', 'result', 'extension'])
+    def update_main_graph(selected_param):
+        # 横軸を出席番号、縦軸を選択したパラメータにする
+        df = pd.DataFrame()
+        for key, data in data_dict.items():
+            data['attendance'] = key
+            df = pd.concat([df, data])
+
+        fig = px.line(df, x='attendance', y=selected_param,
+                      title=f'{selected_param} by Attendance Number')
         return fig
 
     @app.callback(
-        Output('individual-dropdown', 'options'),
+        Output('individual-data', 'children'),
         [Input('attendance-dropdown', 'value')]
     )
-    def update_individual_options(attendance_number):
-        data = data_dict[attendance_number]
-        unique_values = data['object'].unique()
-        return [{'label': val, 'value': val} for val in unique_values]
-
-    @app.callback(
-        Output('individual-graph', 'figure'),
-        [Input('individual-dropdown', 'value'),
-         Input('xaxis-column', 'value'),
-         Input('yaxis-column', 'value'),
-         Input('attendance-dropdown', 'value')]
-    )
-    def update_individual_graph(selected_object, xaxis_column_name,
-                                yaxis_column_name, attendance_number):
-        data = data_dict[attendance_number]
-        filtered_data = data[data['object'] == selected_object]
-        fig = px.scatter(filtered_data, x=xaxis_column_name,
-                         y=yaxis_column_name,
-                         hover_data=['object', 'result', 'extension'])
-        return fig
+    def update_individual_data(selected_attendance):
+        individual_df = data_dict.get(str(selected_attendance), pd.DataFrame())
+        return html.Div([
+            html.H3(f'Individual Data for Attendance {selected_attendance}'),
+            dcc.Graph(
+                figure=px.line(individual_df, x='timeStamp',
+                               y=individual_df.columns,
+                               title=f'Detailed Data for{selected_attendance}')
+            )
+        ])
