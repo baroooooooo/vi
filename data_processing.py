@@ -1,39 +1,74 @@
 import pandas as pd
+import json
 # 定義
-COLUMNS = ['actor', 'object', 'verb', 'extension', 'timeStamp']
+COLUMNS = ['actor', 'timeStamp', 'object', 'result', 'verb', 'extension']
+
 RESULT_COLUMNS = ['duration', 'position', 'completion', 'questionId', 'success', 'continue']
 
 
 # display内の行動を1,0,-1のように数値で分類
-def verb_change(data):
-    DISPLAY = COLUMNS.index('display')
+
+
+def verb_change(data_list):
+    VERB = 4  # 'verb' がデータ内の位置に対応するインデックス
+
     delete_line = []
-    for i in range(0, len(data)):
-        # 開始系
-        if data[i][DISPLAY].startswith('launched') or \
-                data[i][DISPLAY].startswith('started') or \
-                data[i][DISPLAY].startswith('resumed') or \
-                data[i][DISPLAY].startswith('played'):
-            data[i][DISPLAY] = 1
-        # 途中系
-        elif data[i][DISPLAY].startswith('finished') or \
-                data[i][DISPLAY].startswith('moved') or \
-                data[i][DISPLAY].startswith('selected') or \
-                data[i][DISPLAY].startswith('opened') or \
-                data[i][DISPLAY].startswith('closed') or \
-                data[i][DISPLAY].startswith('submitted') or \
-                data[i][DISPLAY].startswith('paused'):
-            data[i][DISPLAY] = 0
-        # 終了系
-        elif data[i][DISPLAY].startswith('suspended') or \
-                data[i][DISPLAY].startswith('completed') or \
-                data[i][DISPLAY].startswith('terminated'):
-            data[i][DISPLAY] = -1
-        else:
+
+    for i in range(len(data_list)):
+      
+        try:
+            # verb列のJSON文字列をパースして、displayフィールドを取得
+            verb_data = json.loads(data_list[i][VERB])
+            if isinstance(verb_data, list) and len(verb_data) > 0 and 'display' in verb_data[0]:
+                display_value = verb_data[0]['display']
+            else:
+                delete_line.append(i)
+                continue
+            
+            # 開始系
+            if display_value.startswith('launched') or \
+                    display_value.startswith('started') or \
+                    display_value.startswith('resumed') or \
+                    display_value.startswith('played'):
+                data_list[i][VERB] = 1
+            # 途中系
+            elif display_value.startswith('finished') or \
+                    display_value.startswith('moved') or \
+                    display_value.startswith('selected') or \
+                    display_value.startswith('opened') or \
+                    display_value.startswith('closed') or \
+                    display_value.startswith('submitted') or \
+                    display_value.startswith('paused'):
+                data_list[i][VERB] = 0
+            # 終了系
+            elif display_value.startswith('suspended') or \
+                    display_value.startswith('completed') or \
+                    display_value.startswith('terminated'):
+                data_list[i][VERB] = -1
+            else:
+                delete_line.append(i)
+        except (json.JSONDecodeError) as e:
+            print(f"Error processing row {i}: {e}")
             delete_line.append(i)
-    for d in sorted(delete_line, reverse=True):  # 後ろから削除
-        data.pop(d)
-    return data
+        except (KeyError) as e:
+            print(f"Error processing row {i}: {e}")
+            print('a')
+            delete_line.append(i)
+        except (IndexError) as e:
+            print(f"Error processing row {i}: {e}")
+            delete_line.append(i)
+
+    print(f"Rows to delete: {delete_line}")  # デバッグ: 削除対象の行を表示
+    print(f"Data before deletion:\n{data_list[:5]}")  # デバッグ: 削除前のデータを表示
+    # 後ろから削除
+    for d in sorted(delete_line, reverse=True):
+        data_list.pop(d)
+
+    print(f"Data after verb_change:\n{data_list[:5]}")  # デバッグ: 処理後のデータを表示
+    return data_list
+
+
+
 
 
 # timeStampをリストに直して、関数からyear,hour,minute,secondに分類
@@ -51,12 +86,22 @@ def stamp_to_ymd(df):
 
 
 def stamp_to_deff_time(df):
-    df['timeStamp'] = pd.to_datetime(df['timeStamp'])
-    df['btimeStamp'] = df['timeStamp'].shift(1)
-    df.at[df.index[0], 'btimeStamp'] = df['timeStamp'].min()
-    df['timeDiff'] = df['timeStamp'] - df['btimeStamp']
-    df['timeDiff'] = df['timeDiff'].dt.total_seconds()
-    df = df.drop(['btimeStamp'], axis=1)
+    # 'timeStamp'列が存在するか確認
+    if 'timeStamp' not in df.columns:
+        raise KeyError("'timeStamp' column not found in the data")
+    
+    try:
+        # 'timeStamp'列をdatetime型に変換
+        df['timeStamp'] = pd.to_datetime(df['timeStamp'], utc=True)
+    except Exception as e:
+        raise ValueError(f"Error parsing 'timeStamp' column: {e}")
+    
+    # 'timeStamp'列が存在し、適切に変換された場合に処理を続行
+    df = df.sort_values('timeStamp')
+    df['time_diff'] = df['timeStamp'].diff().dt.total_seconds()
+    
+    print(f'DataFrame after calculating time_diff:\n{df.head()}')  # デバッグ: time_diff計算後のデータ確認
+    
     return df
 
 
@@ -72,7 +117,9 @@ def to_value_list(data):
     for row in data:
         row_dict = dict(zip(COLUMNS, row))
         seikei_list.append(row_dict)
+    print(f"Converted list:\n{seikei_list[:5]}")  # デバッグ: 変換後のデータを表示
     return seikei_list
+
 
 
 def list_to_dict(RESULT_COLUMNS):
