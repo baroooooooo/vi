@@ -5,47 +5,45 @@ import traceback
 from data_processing import (
     verb_change, stamp_to_ymd, stamp_to_deff_time, to_value_list
 )
+from utils import extract_attendance_number
+import chardet
+
+
+def detect_encoding(file_path):
+    with open(file_path, 'rb') as file:
+        result = chardet.detect(file.read())
+    return result['encoding']
 
 
 
 def load_data(file_path):
-    try:
-        data = pd.read_csv(file_path)
-        print(f'Initial data:\n{data.head()}')  # デバッグ: データの内容を確認
-
-        # 列名を変更
-        if 'timestamp' in data.columns:
-            data.rename(columns={'timestamp': 'timeStamp'}, inplace=True)
-        else:
-            print("Warning: 'timestamp' column not found in the data.")
-
-        print(f'Data after renaming columns:\n{data.head()}')  # デバッグ: 列名変更後のデータ確認
-
-        # 必要な列のみを残す
-        required_columns = ['actor', 'timeStamp', 'object', 'result', 'verb', 'extension']
-
-        if not all(col in data.columns for col in required_columns):
-            raise Exception(f"Required columns missing in {file_path}")
-
-        data = data[required_columns]
-        print(f'Data with required columns:\n{data.head()}')  # デバッグ: 必要な列のみのデータ確認
-
-        # JSON列のパース
-        data['actor'] = data['actor'].apply(
-            lambda x: json.loads(x)[0]['openId']
-        )
-        data['object'] = data['object'].apply(
-            lambda x: json.loads(x)[0]['objectId']
-        )
-        data['verb'] = data['verb'].apply(
-            lambda x: json.loads(x)[0]['display']
-        )
-        data['extension'] = data['extension'].apply(
-            lambda x: json.loads(x)[0]['deviceId']
-        )
+   print(f'Loading data from: {file_path}')  # デバッグ用
+   try:
+        with open(file_path, 'r', encoding='utf-8', errors='replace') as file:
+            data = pd.read_csv(file)
         
-        data['timeStamp'] = pd.to_datetime(data['timeStamp'])
-        print(f'Data with parsed timeStamp:\n{data.head()}')  # デバッグ: timeStamp列のパース後のデータ確認
+        # 出席番号がファイル名に含まれているため、ファイル名から出席番号を抽出してデータに追加
+        attendance_number = int(os.path.splitext(os.path.basename(file_path))[0])
+        data['attendance_number'] = attendance_number
+
+        # JSONパース処理
+        if 'actor' in data.columns and data['actor'].str.startswith('[').any():
+            data['actor'] = data['actor'].apply(lambda x: json.loads(x)[0]['openId'])
+        if 'object' in data.columns and data['object'].str.startswith('[').any():
+            data['object'] = data['object'].apply(lambda x: json.loads(x)[0]['objectId'])
+        if 'verb' in data.columns and data['verb'].str.startswith('[').any():
+            data['verb'] = data['verb'].apply(lambda x: json.loads(x)[0]['display'])
+        if 'extension' in data.columns and data['extension'].str.startswith('[').any():
+            data['extension'] = data['extension'].apply(lambda x: json.loads(x)[0]['deviceId'])
+        
+        data['timeStamp'] = pd.to_datetime(data['timeStamp'], errors='coerce')
+        attendance_number = extract_attendance_number(file_path)
+        data['attendance_number'] = attendance_number
+        
+        return data
+   except Exception as e:
+        print(f'Error loading data from {file_path}: {e}')
+        return pd.DataFrame()  # エラーが発生した場合は空のDataFrameを返す
 
         # データ整形
         data_list = data.values.tolist()
@@ -67,12 +65,9 @@ def load_data(file_path):
 
         print(f"Loaded data for {file_path} successfully")
         return df
+        print(df.columns)
 
-    except Exception as e:
-        print(f'Error loading data from {file_path}: {e}')
-        traceback.print_exc()
-        return pd.DataFrame()  # エラーが発生した場合は空のDataFrameを返す
-
+   
 def get_file_list(directory):
     file_paths = []
 
@@ -85,16 +80,18 @@ def get_file_list(directory):
 
     return file_paths
 
+def sort_by_attendance_number(data_dict):
+    # 出席番号をキーにして昇順に並べ替える
+    sorted_data_dict = dict(sorted(data_dict.items(), key=lambda item: int(item[0])))
+    return sorted_data_dict
 
 def load_all_data(file_paths):
     data_dict = {}
-
     for file_path in file_paths:
-        attendance_number = os.path.basename(file_path).split('.')[0]
+        attendance_number = extract_attendance_number(file_path)
         print(f'Loading file: {file_path} for ID: {attendance_number}')
-
         data = load_data(file_path)
         if not data.empty:
             data_dict[attendance_number] = data
-
+    print("Loaded data_dict:", data_dict)  # デバッグ用
     return data_dict

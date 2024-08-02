@@ -8,29 +8,45 @@ RESULT_COLUMNS = ['duration', 'position', 'completion', 'questionId', 'success',
 
 # display内の行動を1,0,-1のように数値で分類
 
+def sort_by_attendance_number(data_dict):
+    # 出席番号をキーにして昇順に並べ替える
+    sorted_data_dict = dict(sorted(data_dict.items(), key=lambda item: int(item[0])))
+    return sorted_data_dict
+
 
 def verb_change(data_list):
-    VERB = 4  # 'verb' がデータ内の位置に対応するインデックス
+    VERB_COLUMN = 'verb'  # 'verb' 列にアクセスするためのキー名
 
     delete_line = []
 
-    for i in range(len(data_list)):
-      
+    for i, record in enumerate(data_list):
+        if 'timeStamp' not in record:
+            print(f"Record {i} is missing 'timeStamp'.")
+            delete_line.append(i)
+            continue
+
         try:
-            # verb列のJSON文字列をパースして、displayフィールドを取得
-            verb_data = json.loads(data_list[i][VERB])
-            if isinstance(verb_data, list) and len(verb_data) > 0 and 'display' in verb_data[0]:
-                display_value = verb_data[0]['display']
+            verb_content = record[VERB_COLUMN]
+            
+            
+            # verbがJSON形式であるかを確認
+            if verb_content.startswith('{') or verb_content.startswith('['):
+                verb_data = json.loads(verb_content)
+                if isinstance(verb_data, list) and len(verb_data) > 0 and 'display' in verb_data[0]:
+                    display_value = verb_data[0]['display']
+                else:
+                    delete_line.append(i)
+                    continue
             else:
-                delete_line.append(i)
-                continue
+                # プレーンテキストの場合はそのまま使用
+                display_value = verb_content
             
             # 開始系
             if display_value.startswith('launched') or \
                     display_value.startswith('started') or \
                     display_value.startswith('resumed') or \
                     display_value.startswith('played'):
-                data_list[i][VERB] = 1
+                record[VERB_COLUMN] = 1
             # 途中系
             elif display_value.startswith('finished') or \
                     display_value.startswith('moved') or \
@@ -39,22 +55,18 @@ def verb_change(data_list):
                     display_value.startswith('closed') or \
                     display_value.startswith('submitted') or \
                     display_value.startswith('paused'):
-                data_list[i][VERB] = 0
+                record[VERB_COLUMN] = 0
             # 終了系
             elif display_value.startswith('suspended') or \
                     display_value.startswith('completed') or \
                     display_value.startswith('terminated'):
-                data_list[i][VERB] = -1
+                record[VERB_COLUMN] = -1
             else:
                 delete_line.append(i)
-        except (json.JSONDecodeError) as e:
-            print(f"Error processing row {i}: {e}")
+        except json.JSONDecodeError as e:
+            print(f"JSONDecodeError processing row {i}: {e}")
             delete_line.append(i)
-        except (KeyError) as e:
-            print(f"Error processing row {i}: {e}")
-            print('a')
-            delete_line.append(i)
-        except (IndexError) as e:
+        except (KeyError, IndexError) as e:
             print(f"Error processing row {i}: {e}")
             delete_line.append(i)
 
@@ -70,7 +82,6 @@ def verb_change(data_list):
 
 
 
-
 # timeStampをリストに直して、関数からyear,hour,minute,secondに分類
 def stamp_to_ymd(df):
     df['timeStamp'] = pd.to_datetime(df['timeStamp'])
@@ -82,6 +93,7 @@ def stamp_to_ymd(df):
     df['second'] = df['timeStamp'].dt.second
     df['dayofweek'] = df['timeStamp'].dt.dayofweek
     df = df.drop(['timeStamp'], axis=1)
+    print(df.columns) 
     return df
 
 
@@ -99,7 +111,6 @@ def stamp_to_deff_time(df):
     # 'timeStamp'列が存在し、適切に変換された場合に処理を続行
     df = df.sort_values('timeStamp')
     df['time_diff'] = df['timeStamp'].diff().dt.total_seconds()
-    
     print(f'DataFrame after calculating time_diff:\n{df.head()}')  # デバッグ: time_diff計算後のデータ確認
     
     return df
