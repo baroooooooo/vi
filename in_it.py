@@ -1,94 +1,127 @@
 import pandas as pd
 import os
-from data_processing import (
-    verb_change, stamp_to_deff_time, to_value_list
-)
-from utils import extract_attendance_number
-import chardet
 import json
-
-def detect_encoding(file_path):
-    with open(file_path, 'rb') as file:
-        result = chardet.detect(file.read())
-    return result['encoding']
 
 def load_data(file_path):
     print(f'Loading data from: {file_path}')  # デバッグ用
+    data_dict = {'timeStamp': [], 'verb': [], 'object': [], 'attendance_number': None}
+
     try:
         with open(file_path, 'r', encoding='utf-8', errors='replace') as file:
             data = pd.read_csv(file)
         
-        attendance_number = int(os.path.splitext(os.path.basename(file_path))[0])
-        
-        data['timeStamp'] = pd.to_datetime(data['timeStamp'], errors='coerce')
-        
-        data_list = data.values.tolist()
-        data_list = to_value_list(data_list)
-        data_list = verb_change(data_list)
-        
-        df = pd.DataFrame(data_list)
-        df = stamp_to_deff_time(df)
-
-        df['attendance_number'] = attendance_number
+        data_dict['attendance_number'] = int(os.path.splitext(os.path.basename(file_path))[0])
+        data_dict['timeStamp'] = pd.to_datetime(data['timeStamp'], errors='coerce').tolist()
+        data_dict['verb'] = data['verb'].tolist()
+        data_dict['object'] = data['object'].tolist()
 
         print(f"Loaded data for {file_path} successfully")
-        return df
+        print(f"Sample data: {data_dict['timeStamp'][:5]}")  # デバッグ用
+        print(f"Verb column values: {pd.Series(data_dict['verb']).value_counts()}")  # デバッグ用
+        return data_dict
     except Exception as e:
         print(f'Error loading data from {file_path}: {e}')
-        return pd.DataFrame()  # エラーが発生した場合は空のDataFrameを返す
+        return None  # エラーが発生した場合はNoneを返す
 
-def calculate_answer_time(data):
-    launched_times = data[data['verb'] == 1]['timeStamp'].reset_index(drop=True)
-    suspended_times = data[data['verb'] == -1]['timeStamp'].reset_index(drop=True)
-
-    if len(launched_times) == len(suspended_times):
-        answer_time = (suspended_times - launched_times).sum()
-    else:
-        answer_time = pd.Timedelta(0)
-
-    return answer_time.total_seconds()
-
-def calculate_submission_count(data):
-    # 'verb' 列が 0 の行をカウントする
-    submission_count = (data['verb'] == 0).sum()
+def calculate_submission_count(verbs):
+    submission_count = 0
+    for i, verb in enumerate(verbs):
+        try:
+            verb_json = json.loads(verb)
+            if 'submitted' in verb_json[0].get('display', ''):
+                submission_count += 1
+        except (json.JSONDecodeError, IndexError) as e:
+            print(f"Error processing verb at index {i}: {e}")
+            print(f"Offending data: {verb}")  # 問題のデータを表示
+            continue  # エラーが発生した場合はスキップ
+    
     return submission_count
+    
+    
+def calculate_answer_time(verbs, timestamps):
+    launched_times = []
+    suspended_times = []
 
-def calculate_play_counts(data):
-    audio_play_count = data[(data['verb'] == 0) & (data['object'].str.contains('.mp3'))].shape[0]
-    video_play_count = data[(data['verb'] == 0) & (data['object'].str.contains('movie'))].shape[0]
+    for i, verb in enumerate(verbs):
+        try:
+            verb_json = json.loads(verb)
+            if verb_json and verb_json[0].get('display', '') == 'launched':
+                launched_times.append(timestamps[i])
+            elif verb_json and verb_json[0].get('display', '') == 'suspended':
+                suspended_times.append(timestamps[i])
+        except (json.JSONDecodeError, IndexError) as e:
+            print(f"Error processing verb at index {i}: {e}")
+            continue  # エラーが発生した場合はスキップ
+
+    if len(launched_times) != len(suspended_times):
+        print("Warning: Mismatch in launched and suspended times length.")
+
+    total_answer_time = 0
+    for i in range(min(len(launched_times), len(suspended_times))):
+        start_time = launched_times[i]
+        end_time = suspended_times[i]
+        duration = (end_time - start_time).total_seconds()
+        total_answer_time += duration
+
+    return total_answer_time
+
+  
+
+
+def calculate_play_counts(object_list):
+    audio_play_count = sum(
+        1 for obj in object_list
+        if any('.mp3' in o.get('objectId', '') for o in json.loads(obj))
+    )
+    video_play_count = sum(
+        1 for obj in object_list
+        if any('movie' in o.get('objectId', '') for o in json.loads(obj))
+    )
 
     return {
         'audio_start_count': audio_play_count,
         'video_start_count': video_play_count
     }
 
-def calculate_parameters(data):
-    answer_time = calculate_answer_time(data)
-    submission_count = calculate_submission_count(data)
-    play_counts = calculate_play_counts(data)
+def calculate_parameters(data_dict):
+    results = {}
 
-    return {
-        'answer_time': answer_time,
-        'submission_count': submission_count,
-        **play_counts
-    }
+    for attendance_number, data in data_dict.items():
+        # 各データのカウントなどをここで行う
+        answer_time = calculate_answer_time(data['verb'], data['timeStamp'])  # ここで両方の引数を渡す
+        submission_count = calculate_submission_count(data['verb'])
+        play_counts = calculate_play_counts(data['object'])
+
+        results[attendance_number] = {
+            'answer_time': answer_time,
+            'submission_count': submission_count,
+            'play_counts': play_counts
+        }
+    
+    return results
+
 
 def prepare_data(directory):
-    calculated_results = {}
-    
-    for root, dirs, files in os.walk(directory):  # os.walkを使用して再帰的にファイルを探索
-        for file_name in files:
-            if file_name.endswith('.csv'):
-                file_path = os.path.join(root, file_name)  # フルパスを取得
-                attendance_number = os.path.splitext(file_name)[0]  # 出席番号をファイル名から抽出
-                data = load_data(file_path)
-                
-                if data.empty:
-                    print(f"No data loaded for file: {file_path}")
-                    continue
-                
-                parameters = calculate_parameters(data)
-                calculated_results[attendance_number] = parameters
-    
-    print("Prepared data:", calculated_results)  # デバッグ用
+    file_paths = get_file_list(directory)
+    data_dict = load_all_data(file_paths)
+    calculated_results = calculate_parameters(data_dict)
     return calculated_results
+
+# ここで get_file_list と load_all_data 関数を定義
+def get_file_list(directory):
+    file_paths = []
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if file.endswith('.csv'):
+                file_paths.append(os.path.join(root, file))
+    return file_paths
+
+def load_all_data(file_paths):
+    data_dict = {}
+    for file_path in file_paths:
+        attendance_number = os.path.basename(file_path).split('.')[0]
+        print(f'Loading file: {file_path} for ID: {attendance_number}')
+        data = load_data(file_path)
+        if data:  # dataがNoneでないことを確認
+            data_dict[attendance_number] = data
+    return data_dict

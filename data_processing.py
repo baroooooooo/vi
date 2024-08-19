@@ -4,6 +4,7 @@ import json
 COLUMNS = ['actor', 'timeStamp', 'object', 'result', 'verb', 'extension']
 
 def verb_change(data_list):
+    
     VERB_COLUMN = 'verb'
     delete_line = []
     
