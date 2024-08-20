@@ -1,29 +1,57 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard</title>
+    <title>Data Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <h1>Data Overview</h1>
-    <table border="1">
-        <thead>
-            <tr>
-                {% for key in data[0].keys() %}
-                <th>{{ key }}</th>
-                {% endfor %}
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in data %}
-            <tr>
-                {% for value in row.values() %}
-                <td>{{ value }}</td>
-                {% endfor %}
-            </tr>
+    <form method="POST">
+        <label for="year">Select Year:</label>
+        <select name="year" id="year">
+            {% for year in years %}
+                <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>{{ year }}</option>
             {% endfor %}
-        </tbody>
-    </table>
+        </select>
+
+        <label for="parameter">Select Parameter:</label>
+        <select name="parameter" id="parameter">
+            {% for param in parameters %}
+                <option value="{{ param.value }}" {% if param.value == selected_parameter %}selected{% endif %}>{{ param.label }}</option>
+            {% endfor %}
+        </select>
+
+        <button type="submit">Update</button>
+    </form>
+
+    <div>
+        <h2>Data for Year {{ selected_year }}</h2>
+        <p>Selected Parameter: {{ selected_parameter }}</p>
+    </div>
+
+    <canvas id="myChart"></canvas>
+
+    <script>
+        var ctx = document.getElementById('myChart').getContext('2d');
+        var myChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: {{ x_data|tojson }},
+                datasets: [{
+                    label: '{{ selected_parameter }}',
+                    data: {{ y_data|tojson }},
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    </script>
 </body>
 </html>
