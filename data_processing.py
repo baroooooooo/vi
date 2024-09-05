@@ -72,6 +72,9 @@ def calculate_counts_and_times(data):
     total_answer_time = 0
     recording_time = 0
     video_time = 0
+    recorder_start_count = 0 
+    movie_completed_count = 0
+    continue_count = 0
 
     for index, row in data.iterrows():
         try:
@@ -137,6 +140,20 @@ def calculate_counts_and_times(data):
                     elif 'movie' in objects[0].get('objectId', ''):
                         video_time += duration
 
+            if any(verb.get('display') == 'started' and 'recorder' in obj.get('objectId', '') for verb in verbs for obj in objects):
+                recorder_start_count += 1
+
+            if any(verb.get('display') == 'completed' and 'movie' in obj.get('objectId', '') for verb in verbs for obj in objects):
+                movie_completed_count += 1
+
+            if any(verb.get('display') == 'moved' for verb in verbs):
+                if isinstance(result, dict) and result.get('continue') == True:
+                    continue_count += 1
+                elif isinstance(result, list):
+                    for res in result:
+                        if isinstance(res, dict) and res.get('continue') == True:
+                            continue_count += 1
+
         except (json.JSONDecodeError, TypeError, ValueError) as e:
             print(f"Error processing row {index}: {e}")
             continue
@@ -151,7 +168,10 @@ def calculate_counts_and_times(data):
         'launched_count': launched_count,
         'total_answer_time': total_answer_time,
         'recording_time': recording_time,
-        'video_time': video_time
+        'video_time': video_time,
+        'recorder_start_count': recorder_start_count,
+        'movie_completed_count': movie_completed_count,
+        'continue_count': continue_count
     }
 
 
