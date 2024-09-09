@@ -1,6 +1,6 @@
 import dash
 from dash import dcc, html
-from dash.dependencies import Input, Output
+from dash.dependencies import Input, Output, State
 from flask import Flask, redirect
 from graph import register_callbacks
 from in_it import prepare_data
@@ -36,37 +36,49 @@ app.layout = html.Div([
             dcc.Dropdown(
                 id='parameter-dropdown',
                 options=[
-                    {'label': 'Video Start Count', 'value': 'video_start_count'},
-                    {'label': 'Audio Start Count', 'value': 'audio_start_count'},
-                    {'label': 'Answer Count', 'value': 'answer_count'},
-                    {'label': 'Answer Time', 'value': 'total_answer_time'},
-                    {'label': 'Correct Answers', 'value': 'correct_answers'},
-                    {'label': 'Incorrect Answers', 'value': 'incorrect_answers'},
-                    {'label': 'Suspended Count', 'value': 'suspended_count'},
-                    {'label': 'Launched Count', 'value': 'launched_count'},
-                    {'label': 'Recording Time', 'value': 'recording_time'},
-                    {'label': 'Video Time', 'value': 'video_time'},
-                    {'label': 'Recorder Start Count', 'value': 'recorder_start_count'},
-                    {'label': 'Movie Completed Count', 'value': 'movie_completed_count'},
-                    {'label': 'Continue Count', 'value': 'continue_count'}
+                    {'label': '動画再生回数', 'value': 'video_start_count'},
+                    {'label': '音声再生回数', 'value': 'audio_start_count'},
+                    {'label': '回数回数', 'value': 'answer_count'},
+                    {'label': '回答時間', 'value': 'total_answer_time'},
+                    {'label': '正解数', 'value': 'correct_answers'},
+                    {'label': '不正解数', 'value': 'incorrect_answers'},
+                    {'label': '中断回数', 'value': 'suspended_count'},
+                    {'label': 'アプリ起動回数', 'value': 'launched_count'},
+                    {'label': '録音時間', 'value': 'recording_time'},
+                    {'label': '動画再生時間', 'value': 'video_time'},
+                    {'label': '録音回数', 'value': 'recorder_start_count'},
+                    {'label': '動画再生完了回数', 'value': 'movie_completed_count'},
+                    {'label': '復習回数', 'value': 'continue_count'}
                 ],
                 value='video_start_count',  # デフォルト値
                 placeholder="パラメータを選択してください",
             ),
         ], style={'width': '30%', 'display': 'inline-block'}),
+        
+        html.Div([
+            html.Button('番号順', id='order-number', n_clicks=0),
+            html.Button('昇順', id='order-asc', n_clicks=0),
+            html.Button('降順', id='order-desc', n_clicks=0),
+        ], style={'display': 'flex', 'justify-content': 'center', 'padding': '10px'}),
     ], style={'display': 'flex', 'justify-content': 'center', 'padding': '10px'}),
-
+    
+    html.Div([
+        html.Button('Add Graph', id='add-graph-button', n_clicks=0),
+        html.Button('Remove Graph', id='remove-graph-button', n_clicks=0),
+    ], style={'display': 'flex', 'justify-content': 'center', 'padding': '10px'}),
+    
+    html.Div(id='graphs-container', children=[
+        dcc.Graph(id='parameter-graph',
+                  config={'displayModeBar': True, 'displaylogo': False},
+                  style={'cursor': 'pointer'})
+    ]),
+    
     dcc.Graph(
-        id='parameter-graph',
+        id='radar-chart',
         style={'height': '70vh', 'overflowX': 'auto'}
     ),
-
-     dcc.Graph(
-        id='radar-chart',
-        style={'height': '50vh'}  # スタイルを設定
-    )
+    dcc.Store(id='graph-data', data={'data': [], 'layout': {}})  # グラフデータを保存
 ])
-
 # コールバックの設定
 register_callbacks(app, calculated_results)
 
