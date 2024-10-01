@@ -3,8 +3,6 @@ from dash import dcc, html
 from dash.dependencies import Input, Output, State
 import plotly.graph_objs as go
 
-
-
 def register_callbacks(app, calculated_results):
     @app.callback(
         Output('parameter-graph', 'figure'),
@@ -20,7 +18,7 @@ def register_callbacks(app, calculated_results):
     )
     def update_graph(selected_year, selected_parameter, order_number, order_asc, order_desc, add_graph_n_clicks, remove_graph_n_clicks, existing_graphs):
         if not calculated_results or selected_year is None or selected_parameter is None:
-            return {'data': [], 'layout': {}}, graph_data
+            return {'data': [], 'layout': {}}, existing_graphs
 
         # order の決定
         triggered_id = dash.callback_context.triggered_id
@@ -35,12 +33,19 @@ def register_callbacks(app, calculated_results):
 
         # 選択された年のデータを取得
         year_data = calculated_results.get(selected_year, {})
-        
+
         # 存在する出席番号だけを抽出
         attendance_numbers = [
             attendance_number for attendance_number in year_data.keys()
             if year_data[attendance_number].get(selected_parameter) is not None
         ]
+
+        # 全体の最小値と最大値を計算
+        parameter_values = [
+            year_data[attendance_number][selected_parameter] for attendance_number in attendance_numbers
+        ]
+        min_value = min(parameter_values)
+        max_value = max(parameter_values)
 
         # ソート順に基づいて出席番号を並べ替え
         if order == 'asc':
@@ -51,19 +56,27 @@ def register_callbacks(app, calculated_results):
             attendance_numbers.sort(key=int)
 
         x_positions = list(range(len(attendance_numbers)))
-        y_values = [
-            year_data[attendance_number][selected_parameter] / 3600 if selected_parameter == 'total_answer_time' 
-            else year_data[attendance_number][selected_parameter]
+
+        # 元の値と正規化された値を計算
+        y_values_original = [
+            year_data[attendance_number][selected_parameter] for attendance_number in attendance_numbers
+        ]
+        
+        # 正規化された値の計算（全体に対して正規化）
+        y_values_normalized = [
+            (year_data[attendance_number][selected_parameter] - min_value) / (max_value - min_value)
+            if max_value != min_value else 0  # 最大値と最小値が等しい場合は0に設定
             for attendance_number in attendance_numbers
         ]
 
-        new_data = go.Bar(
+        # 元のデータを表示するためのグラフ
+        original_data = go.Bar(
             x=x_positions,
-            y=y_values,
+            y=y_values_original,
             text=attendance_numbers,  # 数値を文字列に変換して表示
             textposition='outside',
             marker={'color': 'rgba(255, 99, 71, 0.6)'},
-            name=selected_parameter
+            name=f'{selected_parameter} (Original)'
         )
 
         layout = {
@@ -79,7 +92,7 @@ def register_callbacks(app, calculated_results):
                     'color': 'black'
                 }
             },
-            'yaxis': {'title': 'Value'},
+            'yaxis': {'title': f'{selected_parameter} Value'},
             'barmode': 'group',
             'bargap': 0,
             'bargroupgap': 0.1,
@@ -87,21 +100,22 @@ def register_callbacks(app, calculated_results):
         }
 
         # 既存のグラフデータをリストとして初期化
-        if existing_graphs is None:
+        if existing_graphs is None or isinstance(existing_graphs, dict):
             existing_graphs = []
 
         # 追加と削除のロジック
         if add_graph_n_clicks > 0:
             existing_graphs.append(dcc.Graph(
                 id={'type': 'dynamic-graph', 'index': len(existing_graphs)},
-                figure={'data': [new_data], 'layout': layout}
+                figure={'data': [original_data], 'layout': layout}
             ))
         elif remove_graph_n_clicks > 0:
             if existing_graphs:
                 existing_graphs.pop()
 
         # 最後に表示するグラフデータを返す
-        return {'data': [new_data], 'layout': layout}, existing_graphs
+        return {'data': [original_data], 'layout': layout}, existing_graphs
+
     
     @app.callback(
         Output('radar-chart', 'figure'),
@@ -118,39 +132,65 @@ def register_callbacks(app, calculated_results):
         # クリックした出席番号のデータを取得
         data = calculated_results.get(selected_year, {}).get(attendance_number, {})
 
-        print(data)
         if not data:
             return {}
 
-        # レーダーチャートの作成
-        return create_radar_chart(data)
-def create_radar_chart(data):
-    categories = ['動画再生回数', '音声再生回数', '回答数', '正解数', '不正解数',
-                  '中断回数', '起動回数', '回答時間', '録音時間', '動画再生時間']
-    
-    values = [data.get('video_start_count', 0),
-              data.get('audio_start_count', 0),
-              data.get('answer_count', 0),
-              data.get('correct_answers', 0),
-              data.get('incorrect_answers', 0),
-              data.get('suspended_count', 0),
-              data.get('launched_count', 0),
-              data.get('total_answer_time', 0)/3600,
-              data.get('recording_time', 0)/60,
-              data.get('video_time', 0)/60]
-    print(values)
+        # 全体に対する正規化を行うための最大値を計算
+        overall_max_values = {
+            'video_start_count': max(data.get('video_start_count', 0) for data in calculated_results[selected_year].values()),
+            'audio_start_count': max(data.get('audio_start_count', 0) for data in calculated_results[selected_year].values()),
+            'answer_count': max(data.get('answer_count', 0) for data in calculated_results[selected_year].values()),
+            'correct_answers': max(data.get('correct_answers', 0) for data in calculated_results[selected_year].values()),
+            'incorrect_answers': max(data.get('incorrect_answers', 0) for data in calculated_results[selected_year].values()),
+            'suspended_count': max(data.get('suspended_count', 0) for data in calculated_results[selected_year].values()),
+            'launched_count': max(data.get('launched_count', 0) for data in calculated_results[selected_year].values()),
+            'total_answer_time': max(data.get('total_answer_time', 0) for data in calculated_results[selected_year].values()),
+            'recording_time': max(data.get('recording_time', 0) for data in calculated_results[selected_year].values()),
+            'video_time': max(data.get('video_time', 0) for data in calculated_results[selected_year].values()),
+            'recorder_start_count': max(data.get('recorder_start_count', 0) for data in calculated_results[selected_year].values()),
+            'movie_completed_count': max(data.get('movie_completed_count', 0) for data in calculated_results[selected_year].values()),
+            'continue_count': max(data.get('continue_count', 0) for data in calculated_results[selected_year].values()),
+        }
 
-    fig = go.Figure(data=go.Scatterpolar(
-        r=values,
-        theta=categories,
-        fill='toself'
-    ))
-    
-    fig.update_layout(
-        polar=dict(
-            radialaxis=dict(visible=True),
+        # レーダーチャートのために正規化
+        normalized_values = [
+            data.get('video_start_count', 0) / overall_max_values['video_start_count'] if overall_max_values['video_start_count'] > 0 else 0,
+            data.get('audio_start_count', 0) / overall_max_values['audio_start_count'] if overall_max_values['audio_start_count'] > 0 else 0,
+            data.get('answer_count', 0) / overall_max_values['answer_count'] if overall_max_values['answer_count'] > 0 else 0,
+            data.get('correct_answers', 0) / overall_max_values['correct_answers'] if overall_max_values['correct_answers'] > 0 else 0,
+            data.get('incorrect_answers', 0) / overall_max_values['incorrect_answers'] if overall_max_values['incorrect_answers'] > 0 else 0,
+            data.get('suspended_count', 0) / overall_max_values['suspended_count'] if overall_max_values['suspended_count'] > 0 else 0,
+            data.get('launched_count', 0) / overall_max_values['launched_count'] if overall_max_values['launched_count'] > 0 else 0,
+            data.get('total_answer_time', 0) / overall_max_values['total_answer_time'] if overall_max_values['total_answer_time'] > 0 else 0,
+            data.get('recording_time', 0) / overall_max_values['recording_time'] if overall_max_values['recording_time'] > 0 else 0,
+            data.get('video_time', 0) / overall_max_values['video_time'] if overall_max_values['video_time'] > 0 else 0,
+            data.get('recorder_start_count', 0) / overall_max_values['recorder_start_count'] if overall_max_values['recorder_start_count'] > 0 else 0,
+            data.get('movie_completed_count', 0) / overall_max_values['movie_completed_count'] if overall_max_values['movie_completed_count'] > 0 else 0,
+            data.get('continue_count', 0) / overall_max_values['continue_count'] if overall_max_values['continue_count'] > 0 else 0,
+        ]
+
+        categories = [
+            '動画再生回数', '音声再生回数', '回答回数', '正解数', 
+            '不正解数', '中断回数', 'アプリ起動回数', '回答時間', 
+            '録音時間', '動画再生時間', '録音回数', '動画再生完了回数', '復習回数'
+        ]
+
+        # レーダーチャートを作成
+        fig = go.Figure()
+
+        # レーダーチャートを描画
+        fig.add_trace(go.Scatterpolar(
+            r=normalized_values + [normalized_values[0]],  # 最初の値を最後に追加して閉じる
+            theta=categories + [categories[0]],  # 最初のカテゴリを追加
+            fill='toself'
+        ))
+
+        fig.update_layout(polar=dict(
+            radialaxis=dict(
+                visible=True,
+                range=[0, 1]  # 正規化した値は 0 から 1 の範囲
+            )
         ),
-        showlegend=False
-    )
-    
-    return fig
+        showlegend=False)
+
+        return fig
