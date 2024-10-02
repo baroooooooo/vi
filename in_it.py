@@ -40,9 +40,25 @@ def process_data(data, is_result_data=False):
 
     return processed_data
 
-def prepare_data(directory, result_data):
+def load_result_data(directory):
+    result_data = []
+    for root, dirs, files in os.walk(directory):  # resultsディレクトリを再帰的に探索
+        for file in files:
+            if file.endswith('.csv'):  # CSVファイルをチェック
+                file_path = os.path.join(root, file)
+                print(f'Loading result data from: {file_path}')  # デバッグ用
+                try:
+                    data = pd.read_csv(file_path, usecols=['openId', 'test_result'])
+                    result_data.extend(data.values.tolist())  # リストに追加
+                except Exception as e:
+                    print(f"Error loading result data from {file_path}: {e}")
+    return result_data
+
+def prepare_data(data_directory, result_directory):
     data_dict = {}
-    for root, dirs, files in os.walk(directory):
+    
+    # データディレクトリからのデータ処理
+    for root, dirs, files in os.walk(data_directory):  # 指定したディレクトリを再帰的に探索
         for file in files:
             if file.endswith('.csv') and file != 'data_result.csv':  # 'data_result.csv'を除外
                 year = os.path.basename(root)  # フォルダ名から年を取得
@@ -83,23 +99,17 @@ def prepare_data(directory, result_data):
     return data_dict
 
 
-def load_result_data(file_path):
-    try:
-        # 'openId' と 'test_result' のみを読み込む
-        result_data = pd.read_csv(file_path, usecols=['openId', 'test_result'])
-        return result_data.values.tolist()  # リストとして返す
-    except Exception as e:
-        print(f"Error loading result data from {file_path}: {e}")
-        return []
+
 
 if __name__ == "__main__":
-    directory = 'vi/datas'  # データのディレクトリ
-    result_file = os.path.join('vi/results', 'data_result.csv')  # 修正後のファイルパス
+    data_directory = 'C:\\Users\\Syachi\\vi\\datas'  # データのディレクトリ
+    result_directory = 'C:\\Users\\Syachi\\vi\\results'  # 結果のディレクトリ
 
     # 成績データを読み込み
-    result_data = load_result_data(result_file)  # ここでresult_dataを読み込む
+    result_data = load_result_data(result_directory)
 
     # データの準備
-    calculated_results = prepare_data(directory, result_data)  # result_dataを渡す
+    calculated_results = prepare_data(data_directory, result_directory)
     print("Calculation complete. Results:")
     print(calculated_results)
+
