@@ -150,6 +150,7 @@ def register_callbacks(app, calculated_results):
             'recorder_start_count': max(data.get('recorder_start_count', 0) for data in calculated_results[selected_year].values()),
             'movie_completed_count': max(data.get('movie_completed_count', 0) for data in calculated_results[selected_year].values()),
             'continue_count': max(data.get('continue_count', 0) for data in calculated_results[selected_year].values()),
+            'result': max(data.get('result', 0) for data in calculated_results[selected_year].values()),
         }
 
         # レーダーチャートのために正規化
@@ -167,12 +168,13 @@ def register_callbacks(app, calculated_results):
             data.get('recorder_start_count', 0) / overall_max_values['recorder_start_count'] if overall_max_values['recorder_start_count'] > 0 else 0,
             data.get('movie_completed_count', 0) / overall_max_values['movie_completed_count'] if overall_max_values['movie_completed_count'] > 0 else 0,
             data.get('continue_count', 0) / overall_max_values['continue_count'] if overall_max_values['continue_count'] > 0 else 0,
+            data.get('result', 0) / overall_max_values['result'] if overall_max_values['result'] > 0 else 0,
         ]
 
         categories = [
             '動画再生回数', '音声再生回数', '回答回数', '正解数', 
             '不正解数', '中断回数', 'アプリ起動回数', '回答時間', 
-            '録音時間', '動画再生時間', '録音回数', '動画再生完了回数', '復習回数'
+            '録音時間', '動画再生時間', '録音回数', '動画再生完了回数', '復習回数', '成績'
         ]
 
         # レーダーチャートを作成

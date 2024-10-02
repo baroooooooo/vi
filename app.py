@@ -3,7 +3,7 @@ from dash import dcc, html
 from dash.dependencies import Input, Output, State
 from flask import Flask, redirect
 from graph import register_callbacks
-from in_it import prepare_data
+from in_it import prepare_data,load_data
 
 # Flaskサーバーの作成
 server = Flask(__name__)
@@ -13,7 +13,11 @@ app = dash.Dash(__name__, server=server, url_base_pathname='/dashboard/')
 
 # データの準備
 directory = 'datas'
-calculated_results = prepare_data(directory)
+result_file = 'vi/data_result.csv'  # 成績データのファイル
+result_data = load_data(result_file)  # 成績データを読み込み
+
+# データの準備を行う
+calculated_results = prepare_data(directory, result_data)  # 2つの引数を渡す
 
 # 年度のオプションを追加
 years = list(calculated_results.keys())  # ディレクトリから取得した年
@@ -48,7 +52,8 @@ app.layout = html.Div([
                     {'label': '動画再生時間', 'value': 'video_time'},
                     {'label': '録音回数', 'value': 'recorder_start_count'},
                     {'label': '動画再生完了回数', 'value': 'movie_completed_count'},
-                    {'label': '復習回数', 'value': 'continue_count'}
+                    {'label': '復習回数', 'value': 'continue_count'},
+                    {'label': '成績', 'value': 'result'}   
                 ],
                 value='video_start_count',  # デフォルト値
                 placeholder="パラメータを選択してください",
