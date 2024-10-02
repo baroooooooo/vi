@@ -1,9 +1,10 @@
+import os
 import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output, State
 from flask import Flask, redirect
 from graph import register_callbacks
-from in_it import prepare_data,load_data
+from in_it import prepare_data, load_result_data  # load_result_dataをインポート
 
 # Flaskサーバーの作成
 server = Flask(__name__)
@@ -12,12 +13,12 @@ server = Flask(__name__)
 app = dash.Dash(__name__, server=server, url_base_pathname='/dashboard/')
 
 # データの準備
-directory = 'datas'
-result_file = 'vi/data_result.csv'  # 成績データのファイル
-result_data = load_data(result_file)  # 成績データを読み込み
+directory = 'datas'  # データが格納されているディレクトリ
+result_file = os.path.join('vi/results', 'data_result.csv')  # 成績データファイルのパス
 
-# データの準備を行う
-calculated_results = prepare_data(directory, result_data)  # 2つの引数を渡す
+# 成績データを読み込み
+result_data = load_result_data(result_file)  # ここでresult_dataを読み込む
+calculated_results = prepare_data(directory, result_data)  # result_dataを追加
 
 # 年度のオプションを追加
 years = list(calculated_results.keys())  # ディレクトリから取得した年
@@ -53,7 +54,7 @@ app.layout = html.Div([
                     {'label': '録音回数', 'value': 'recorder_start_count'},
                     {'label': '動画再生完了回数', 'value': 'movie_completed_count'},
                     {'label': '復習回数', 'value': 'continue_count'},
-                    {'label': '成績', 'value': 'result'}   
+                    {'label': '成績', 'value': ''}   
                 ],
                 value='video_start_count',  # デフォルト値
                 placeholder="パラメータを選択してください",
@@ -84,6 +85,7 @@ app.layout = html.Div([
     ),
     dcc.Store(id='graph-data', data={'data': [], 'layout': {}})  # グラフデータを保存
 ])
+
 # コールバックの設定
 register_callbacks(app, calculated_results)
 
