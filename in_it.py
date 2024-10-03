@@ -17,6 +17,27 @@ def load_data(file_path):
     except Exception as e:
         print(f"Error loading data from {file_path}: {e}")
         return pd.DataFrame()  # エラーが発生した場合は空のDataFrameを返す
+    
+def load_result_data(directory):
+    result_data = []
+    for root, dirs, files in os.walk(directory):  # resultsディレクトリを再帰的に探索
+        for file in files:
+            if file.endswith('.csv'):  # CSVファイルをチェック
+                file_path = os.path.join(root, file)
+                print(f'Loading result data from: {file_path}')  # デバッグ用
+                try:
+                    # openIdとtest_resultのみを読み込む
+                    data = pd.read_csv(file_path, usecols=['openId', 'test_result'])
+                    print(data.head())  # デバッグ: 読み込んだデータを表示
+                    print(data.dtypes)  # デバッグ: データ型を表示
+                    result_data.extend(data.values.tolist())  # リストに追加
+                except Exception as e:
+                    print(f"Error loading result data from {file_path}: {e}")
+
+    # 読み込んだresult_dataの内容を出力
+    print(f'Loaded result_data: {result_data}')  # デバッグ: result_dataの内容を表示
+    return result_data
+
 
 def process_data(data, is_result_data=False):
     if data.empty:
@@ -25,9 +46,9 @@ def process_data(data, is_result_data=False):
     print(f'Raw Data for Processing: {data.head()}')  # デバッグ: 処理前のデータ確認
 
     if is_result_data:
-        # data_result.csvの場合は、openIdとtest_resultの列のみを処理
-        processed_data = data[['openId', 'test_result']]
-        return processed_data.values.tolist()  # リストとして返す
+        # data_result.csvの場合、openIdとtest_resultのみを処理し、他のカラムは無視する
+        processed_data = data[['openId', 'test_result']].values.tolist()
+        return processed_data  # リストとして返す
     else:
         # 通常のcsvファイル処理: verb列があるか確認
         if 'verb' in data.columns:
@@ -40,21 +61,7 @@ def process_data(data, is_result_data=False):
 
     return processed_data
 
-def load_result_data(directory):
-    result_data = []
-    for root, dirs, files in os.walk(directory):  # resultsディレクトリを再帰的に探索
-        for file in files:
-            if file.endswith('.csv'):  # CSVファイルをチェック
-                file_path = os.path.join(root, file)
-                print(f'Loading result data from: {file_path}')  # デバッグ用
-                try:
-                    data = pd.read_csv(file_path, usecols=['openId', 'test_result'])
-                    result_data.extend(data.values.tolist())  # リストに追加
-                except Exception as e:
-                    print(f"Error loading result data from {file_path}: {e}")
-    return result_data
-
-def prepare_data(data_directory, result_directory):
+def prepare_data(data_directory, result_data):  # result_dataを受け取るように修正
     data_dict = {}
     
     # データディレクトリからのデータ処理
@@ -70,8 +77,7 @@ def prepare_data(data_directory, result_directory):
                 data = load_data(file_path)
                 if not data.empty:
                     # result_dataの`openId`と出席番号を比較
-                    attendance_number_int = int(attendance_number)  # 出席番号を整数に変換
-                    matching_rows = [row for row in result_data if row[0] == attendance_number_int]  # ここを修正
+                    matching_rows = [row for row in result_data if row[0] == attendance_number]  # openIdと比較
                     print(f'Matching rows for {attendance_number}: {matching_rows}')  # デバッグ: マッチング結果
                     
                     if matching_rows:
@@ -79,25 +85,17 @@ def prepare_data(data_directory, result_directory):
                     else:
                         test_result = None  # 成績が見つからない場合
 
-                    # 出席番号データに成績を追加
-                    data['test_result'] = test_result
-                    
+                    # 出席番号に対する成績を保持
                     if year not in data_dict:
                         data_dict[year] = {}
-                    
-                    # データの処理
-                    processed_data = process_data(data)
 
-                    # 成績も一緒に保存
                     data_dict[year][attendance_number] = {
-                        'processed_data': processed_data,  # 処理されたデータ
-                        'test_result': test_result  # 成績
+                        'test_result': test_result  # 成績のみ保存
                     }
 
                     print(f'Processed data for {attendance_number} in {year}: {data_dict[year][attendance_number]}')
     
     return data_dict
-
 
 
 
@@ -109,7 +107,6 @@ if __name__ == "__main__":
     result_data = load_result_data(result_directory)
 
     # データの準備
-    calculated_results = prepare_data(data_directory, result_directory)
+    calculated_results = prepare_data(data_directory, result_data)  # result_dataを渡す
     print("Calculation complete. Results:")
     print(calculated_results)
-
