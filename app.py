@@ -43,7 +43,7 @@ app.layout = html.Div([
                 options=[
                     {'label': '動画再生回数', 'value': 'video_start_count'},
                     {'label': '音声再生回数', 'value': 'audio_start_count'},
-                    {'label': '回数回数', 'value': 'answer_count'},
+                    {'label': '回答回数', 'value': 'answer_count'},
                     {'label': '回答時間', 'value': 'total_answer_time'},
                     {'label': '正解数', 'value': 'correct_answers'},
                     {'label': '不正解数', 'value': 'incorrect_answers'},
