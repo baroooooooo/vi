@@ -32,20 +32,25 @@ def register_callbacks(app, calculated_results):
             order = 'number'
 
         # 選択された年のデータを取得
+        print(f'Selected Year: {selected_year}')
+        print(f'Calculated Results: {calculated_results}')
+
+        # 選択された年のデータを取得
         year_data = calculated_results.get(selected_year, {})
+        print(f'Year Data for {selected_year}: {year_data}')
 
         # 存在する出席番号だけを抽出
         attendance_numbers = [
             attendance_number for attendance_number in year_data.keys()
             if year_data[attendance_number].get(selected_parameter) is not None
         ]
+        print(f'attendance_numbers: {attendance_numbers}')  # attendance_numbersの内容
+
+        if not attendance_numbers:
+            return {'data': [], 'layout': {}}, existing_graphs
 
         # 全体の最小値と最大値を計算
-        parameter_values = [
-            year_data[attendance_number][selected_parameter] for attendance_number in attendance_numbers
-        ]
-        min_value = min(parameter_values)
-        max_value = max(parameter_values)
+        
 
         # ソート順に基づいて出席番号を並べ替え
         if order == 'asc':
@@ -62,13 +67,7 @@ def register_callbacks(app, calculated_results):
             year_data[attendance_number][selected_parameter] for attendance_number in attendance_numbers
         ]
         
-        # 正規化された値の計算（全体に対して正規化）
-        y_values_normalized = [
-            (year_data[attendance_number][selected_parameter] - min_value) / (max_value - min_value)
-            if max_value != min_value else 0  # 最大値と最小値が等しい場合は0に設定
-            for attendance_number in attendance_numbers
-        ]
-
+       
         # 元のデータを表示するためのグラフ
         original_data = go.Bar(
             x=x_positions,
@@ -115,6 +114,7 @@ def register_callbacks(app, calculated_results):
 
         # 最後に表示するグラフデータを返す
         return {'data': [original_data], 'layout': layout}, existing_graphs
+
 
     
     @app.callback(

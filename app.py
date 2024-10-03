@@ -4,7 +4,7 @@ from dash import dcc, html
 from dash.dependencies import Input, Output, State
 from flask import Flask, redirect
 from graph import register_callbacks
-from in_it import prepare_data, load_result_data  # load_result_dataをインポート
+from in_it import prepare_data, load_data_result  # load_result_dataをインポート
 
 # Flaskサーバーの作成
 server = Flask(__name__)
@@ -17,7 +17,7 @@ directory = 'datas'  # データが格納されているディレクトリ
 result_file = os.path.join('vi/results', 'data_result.csv')  # 成績データファイルのパス
 
 # 成績データを読み込み
-result_data = load_result_data(result_file)  # ここでresult_dataを読み込む
+result_data = load_data_result()  # ここでresult_dataを読み込む
 calculated_results = prepare_data(directory, result_data)  # result_dataを追加
 
 # 年度のオプションを追加
