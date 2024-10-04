@@ -54,7 +54,7 @@ app.layout = html.Div([
                     {'label': '録音回数', 'value': 'recorder_start_count'},
                     {'label': '動画再生完了回数', 'value': 'movie_completed_count'},
                     {'label': '復習回数', 'value': 'continue_count'},
-                    {'label': '成績', 'value': ''}   
+                    {'label': '成績', 'value': 'test_result'}   
                 ],
                 value='video_start_count',  # デフォルト値
                 placeholder="パラメータを選択してください",
@@ -71,6 +71,7 @@ app.layout = html.Div([
     html.Div([
         html.Button('Add Graph', id='add-graph-button', n_clicks=0),
         html.Button('Remove Graph', id='remove-graph-button', n_clicks=0),
+        html.Button('Reset Radar Chart', id='reset-radar-button', n_clicks=0),  # リセットボタンを追加
     ], style={'display': 'flex', 'justify-content': 'center', 'padding': '10px'}),
     
     html.Div(id='graphs-container', children=[
