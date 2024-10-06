@@ -1,6 +1,6 @@
 import dash
 from dash import dcc, html
-from dash.dependencies import Input, Output, State
+from dash.dependencies import Input, Output, State, ALL
 import plotly.graph_objs as go
 
 def register_callbacks(app, calculated_results):
@@ -77,15 +77,70 @@ def register_callbacks(app, calculated_results):
             existing_graphs.pop()
 
         return {'data': [original_data], 'layout': layout}, existing_graphs
+    
+
+
+
+    @app.callback(
+        Output('graphs-container', 'children'),
+        Input('add-graph-button', 'n_clicks'),
+        Input('remove-graph-button', 'n_clicks'),
+        State('graphs-container', 'children'),
+        State('year-dropdown', 'value'),
+        State('parameter-dropdown', 'value')
+    )
+    def update_graph_container(add_graph_n_clicks, remove_graph_n_clicks, existing_graphs, selected_year, selected_parameter):
+        # 上記のコードをそのまま追加します
+        if existing_graphs is None:
+            existing_graphs = []
+
+        if not calculated_results or selected_year is None or selected_parameter is None:
+            return existing_graphs  # 初期値に戻す場合
+
+        year_data = calculated_results.get(selected_year, {})
+        attendance_numbers = [
+            attendance_number for attendance_number in year_data.keys()
+            if selected_parameter in year_data[attendance_number]
+        ]
+
+        y_values = [year_data[attendance_number][selected_parameter] for attendance_number in attendance_numbers]
+        
+        new_graph = dcc.Graph(
+            id={'type': 'dynamic-graph', 'index': len(existing_graphs)},
+            figure={
+                'data': [go.Bar(
+                    x=list(range(len(attendance_numbers))),
+                    y=y_values,
+                    text=attendance_numbers,
+                    textposition='outside',
+                    marker={'color': 'rgba(0, 128, 255, 0.6)'},
+                    name=f'{selected_parameter} (Year {selected_year})'
+                )],
+                'layout': go.Layout(
+                    title=f'{selected_parameter} for Year {selected_year}',
+                    xaxis={'title': '出席番号', 'tickvals': list(range(len(attendance_numbers))), 'ticktext': attendance_numbers},
+                    yaxis={'title': f'{selected_parameter} 値'},
+                    plot_bgcolor='rgba(240, 240, 240, 0.95)'
+                )
+            }
+        )
+
+        if add_graph_n_clicks > len(existing_graphs):
+            existing_graphs.append(new_graph)
+        elif remove_graph_n_clicks > 0 and existing_graphs:
+            existing_graphs.pop()
+
+        return existing_graphs
 
     @app.callback(
         Output('radar-chart', 'figure'),
         [Input('parameter-graph', 'clickData'),
+        Input({'type': 'dynamic-graph', 'index': ALL}, 'clickData'),
         Input('year-dropdown', 'value'),
         Input('reset-radar-button', 'n_clicks')],
         [State('radar-chart', 'figure')]
     )
-    def display_radar_chart(clickData, selected_year, reset_n_clicks, current_figure):
+    def display_radar_chart(parameter_graph_clickData, dynamic_graph_clickData, selected_year, reset_n_clicks, current_figure):
         global selected_attendance_numbers
 
         # リセットボタンが押された場合
@@ -95,6 +150,8 @@ def register_callbacks(app, calculated_results):
             return generate_radar_chart([], selected_year)  # 空のレーダーチャートを返す
 
         print(f"clickData: {clickData}")
+         # dynamic-graph も含めたクリックデータから attendance_number を取得
+        clickData = parameter_graph_clickData or next((data for data in dynamic_graph_clickData if data), None)
 
         # クリックデータが存在しない、または年が選択されていない場合
         if clickData is None or selected_year is None:
