@@ -2,7 +2,19 @@ import pandas as pd
 import os
 from data_processing import calculate_counts_and_times
 
+
+# スクリプト内で環境変数を設定
+# C:\\Users\\bbaro\\vi\\datas C:\\Users\\bbaro\\vi\\results自宅
+# C:\\Users\\Syachi\\vi\\datas C:\\Users\\Syachi\\vi\\results学校
+os.environ['DATA_DIRECTORY'] = 'C:\\Users\\bbaro\\vi\\datas'
+os.environ['RESULT_DIRECTORY'] = 'C:\\Users\\bbaro\\vi\\results'
+
+# 環境変数からディレクトリパスを取得し、設定されていない場合はデフォルトパスを使用
+data_directory = os.environ.get('DATA_DIRECTORY', 'C:\\Users\\bbaro\\vi\\datas')
+result_directory = os.environ.get('RESULT_DIRECTORY', 'C:\\Users\\bbaro\\vi\\results')
+
 def load_data(file_path):
+    
     print(f'Loading data from: {file_path}')  # デバッグ用
     try:
         data = pd.read_csv(file_path)
@@ -21,7 +33,7 @@ def load_data(file_path):
         return pd.DataFrame()  # エラーが発生した場合は空のDataFrameを返す
 
 def load_data_result():
-    data_result_path = 'C:/Users/Syachi/vi/results/data_result.csv'
+    data_result_path = 'C:\\Users\\bbaro\\vi\\results\\data_result.csv'
     try:
         data_result = pd.read_csv(data_result_path)
         print("Loaded result_data:", data_result.head())  # 読み込んだデータを確認
@@ -101,8 +113,13 @@ def prepare_data(data_directory, result_data):
     return data_dict
 
 if __name__ == "__main__":
-    data_directory = 'C:\\Users\\Syachi\\vi\\datas'  # データのディレクトリ
-    result_directory = 'C:\\Users\\Syachi\\vi\\results'  # 結果のディレクトリ
+    os.environ['DATA_DIRECTORY'] = 'C:\\Users\\bbaro\\vi\\datas'
+    os.environ['RESULT_DIRECTORY'] = 'C:\\Users\\bbaro\\vi\\results'
+
+    # 環境変数からディレクトリパスを取得し、設定されていない場合はデフォルトパスを使用
+    data_directory = os.environ.get('DATA_DIRECTORY', 'C:\\Users\\bbaro\\vi\\datas')
+    result_directory = os.environ.get('RESULT_DIRECTORY', 'C:\\Users\\bbaro\\vi\\results')
+
 
     # 成績データを読み込み
     result_data = load_data_result()  # 関数名を修正

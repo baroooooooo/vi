@@ -31,9 +31,8 @@ app.layout = html.Div([
         html.Div([
             dcc.Dropdown(
                 id='year-dropdown',
-                options=year_options,
-                value=years[0] if years else None,
-                placeholder="年度を選択してください",
+                options=[{'label': str(year), 'value': year} for year in years],  # yearsは定義済みの年のリスト
+                value=years[0] if years else None,  # デフォルト値の設定
             ),
         ], style={'width': '30%', 'display': 'inline-block'}),
         
@@ -75,16 +74,25 @@ app.layout = html.Div([
     ], style={'display': 'flex', 'justify-content': 'center', 'padding': '10px'}),
     
     html.Div(id='graphs-container', children=[
-        dcc.Graph(id='parameter-graph',
-                  config={'displayModeBar': True, 'displaylogo': False},
-                  style={'cursor': 'pointer'})
+        dcc.Graph(
+            id='parameter-graph',
+            figure={
+                'data': [],
+                'layout': {'title': 'グラフがありません'}
+            },
+            config={'displayModeBar': True, 'displaylogo': False},
+            style={'cursor': 'pointer'}
+        )
     ]),
+
     
     dcc.Graph(
         id='radar-chart',
         style={'height': '70vh', 'overflowX': 'auto'}
     ),
-    dcc.Store(id='graph-data', data={'data': [], 'layout': {}})  # グラフデータを保存
+    html.Div(id='dummy-output', style={'padding': '10px', 'textAlign': 'center'}),
+    dcc.Store(id='graph-data', data=[]),
+    dcc.Store(id='selected-attendance-numbers', data=[])
 ])
 
 # コールバックの設定

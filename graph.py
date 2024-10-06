@@ -4,10 +4,9 @@ from dash.dependencies import Input, Output, State
 import plotly.graph_objs as go
 
 def register_callbacks(app, calculated_results):
+    # グローバル変数を初期化
     global selected_attendance_numbers
-    global first_selected_attendance_number
     selected_attendance_numbers = []
-    first_selected_attendance_number = None
 
     @app.callback(
         Output('parameter-graph', 'figure'),
@@ -83,35 +82,46 @@ def register_callbacks(app, calculated_results):
         Output('radar-chart', 'figure'),
         [Input('parameter-graph', 'clickData'),
         Input('year-dropdown', 'value'),
-        Input('reset-radar-button', 'n_clicks')]
+        Input('reset-radar-button', 'n_clicks')],
+        [State('radar-chart', 'figure')]
     )
-    def display_radar_chart(clickData, selected_year, reset_n_clicks):
+    def display_radar_chart(clickData, selected_year, reset_n_clicks, current_figure):
         global selected_attendance_numbers
 
-        reset_n_clicks = reset_n_clicks or 0
-
-        # リセットボタンが押されたら全ての選択をリセット
-        if reset_n_clicks > 0:
+        # リセットボタンが押された場合
+        if reset_n_clicks and dash.callback_context.triggered_id == 'reset-radar-button':
             print("Reset button clicked")
-            selected_attendance_numbers = []  # 選択リストを空にする
+            selected_attendance_numbers = []  # 選択された出席番号をリセット
             return generate_radar_chart([], selected_year)  # 空のレーダーチャートを返す
 
-        # clickDataがないか年が選択されていない場合の処理
+        print(f"clickData: {clickData}")
+
+        # クリックデータが存在しない、または年が選択されていない場合
         if clickData is None or selected_year is None:
             print("clickData or selected_year is None")
-            return generate_radar_chart(selected_attendance_numbers, selected_year)  # 選択がない場合は既存の選択を使用
+            # 何も選択されていない場合、最初のレーダーチャートを生成する
+            if not selected_attendance_numbers:  # 最初の状態で何も選択されていない場合
+                return generate_radar_chart([], selected_year)
+            return current_figure
 
-        # クリックされた出席番号を抽出
         attendance_number = clickData['points'][0]['text']
         print(f"Selected attendance number: {attendance_number}")
 
-        # 選択された出席番号をリストに追加
+        # 新しい出席番号を選択リストに追加
         if attendance_number not in selected_attendance_numbers:
             selected_attendance_numbers.append(attendance_number)
             print(f"Attendance number {attendance_number} added to selection")
 
-        # レーダーチャートを生成
+        # 選択された出席番号に基づいてレーダーチャートを生成
         return generate_radar_chart(selected_attendance_numbers, selected_year)
+
+
+
+
+
+
+
+
 
 
     def generate_radar_chart(selected_attendance_numbers, selected_year):
@@ -175,37 +185,37 @@ def register_callbacks(app, calculated_results):
             ]
 
             radar_traces.append(go.Scatterpolar(
-                r=normalized_values + [normalized_values[0]],  # クローズドなポリゴンを作るために最初の値を再度追加
+                r=normalized_values + [normalized_values[0]],  # 最後の点を最初の点に戻す
                 theta=[
-                    'Video Start Count',
-                    'Audio Start Count',
-                    'Answer Count',
-                    'Correct Answers',
-                    'Incorrect Answers',
-                    'Suspended Count',
-                    'Launched Count',
-                    'Total Answer Time',
-                    'Recording Time',
-                    'Video Time',
-                    'Recorder Start Count',
-                    'Movie Completed Count',
-                    'Continue Count',
-                    'Test Result',
-                ] + ['Video Start Count'],  # クローズドなポリゴンを作るために最初の値を再度追加
+                    'video_start_count',
+                    'audio_start_count',
+                    'answer_count',
+                    'correct_answers',
+                    'incorrect_answers',
+                    'suspended_count',
+                    'launched_count',
+                    'total_answer_time',
+                    'recording_time',
+                    'video_time',
+                    'recorder_start_count',
+                    'movie_completed_count',
+                    'continue_count',
+                    'test_result'
+                ] + ['video_start_count'],  # 閉じるために最初の項目を追加
                 fill='toself',
-                name=attendance_number
+                name=attendance_number,
             ))
 
-        layout = go.Layout(
-            title='出席番号ごとのレーダーチャート',
-            polar=dict(
-                radialaxis=dict(
-                    visible=True,
-                    range=[0, 1]
-                )
-            ),
-            showlegend=True
-        )
-
-        return {'data': radar_traces, 'layout': layout}
-
+        return {
+            'data': radar_traces,
+            'layout': go.Layout(
+                title='選択された出席番号のレーダーチャート',
+                polar=dict(
+                    radialaxis=dict(
+                        visible=True,
+                        range=[0, 1]
+                    )
+                ),
+                showlegend=True
+            )
+        }
