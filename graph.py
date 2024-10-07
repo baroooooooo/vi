@@ -1,6 +1,6 @@
 import dash
 from dash import dcc, html
-from dash.dependencies import Input, Output, State, ALL
+from dash.dependencies import Input, Output, State, ALL, MATCH
 import plotly.graph_objs as go
 
 def register_callbacks(app, calculated_results):
@@ -68,14 +68,6 @@ def register_callbacks(app, calculated_results):
         if existing_graphs is None or isinstance(existing_graphs, dict):
             existing_graphs = []
 
-        if add_graph_n_clicks > 0:
-            existing_graphs.append(dcc.Graph(
-                id={'type': 'dynamic-graph', 'index': len(existing_graphs)},
-                figure={'data': [original_data], 'layout': layout}
-            ))
-        elif remove_graph_n_clicks > 0 and existing_graphs:
-            existing_graphs.pop()
-
         return {'data': [original_data], 'layout': layout}, existing_graphs
     
 
@@ -90,47 +82,128 @@ def register_callbacks(app, calculated_results):
         State('parameter-dropdown', 'value')
     )
     def update_graph_container(add_graph_n_clicks, remove_graph_n_clicks, existing_graphs, selected_year, selected_parameter):
-        # 上記のコードをそのまま追加します
         if existing_graphs is None:
             existing_graphs = []
+            
+        # ボタンがクリックされていない場合
+        if not add_graph_n_clicks and not remove_graph_n_clicks:
+            return existing_graphs
 
+        # グラフ追加ボタンがクリックされた場合
+        if add_graph_n_clicks > 0:
+            year_data = calculated_results.get(selected_year, {})
+            attendance_numbers = [
+                attendance_number for attendance_number in year_data.keys()
+                if selected_parameter in year_data[attendance_number]
+            ]
+
+            y_values = [year_data[attendance_number][selected_parameter] for attendance_number in attendance_numbers]
+            
+            new_graph = html.Div(
+                [
+                    dcc.Graph(
+                        id={'type': 'dynamic-graph', 'index': len(existing_graphs)+1},
+                        figure={
+                            'data': [go.Bar(
+                                x=list(range(len(attendance_numbers))),
+                                y=y_values,
+                                text=attendance_numbers,
+                                textposition='outside',
+                                marker={'color': 'rgba(0, 128, 255, 0.6)'},
+                                name=f'{selected_parameter} (Year {selected_year})'
+                            )],
+                            'layout': go.Layout(
+                                title=f'{selected_parameter} for Year {selected_year}',
+                                xaxis={'title': '出席番号', 'tickvals': list(range(len(attendance_numbers))), 'ticktext': attendance_numbers},
+                                yaxis={'title': f'{selected_parameter} 値'},
+                                plot_bgcolor='rgba(240, 240, 240, 0.95)'
+                            )
+                        }
+                    ),
+                ]
+            )
+            existing_graphs.append(new_graph)
+
+        # グラフ削除ボタンがクリックされた場合
+        if remove_graph_n_clicks > 0 and existing_graphs:
+            existing_graphs.pop()  # 一番新しい（最後の）グラフを削除
+
+        return existing_graphs
+
+    # 特定のグラフを削除するためのコールバック
+    @app.callback(
+        Output('graphs-container', 'children', allow_duplicate=True),
+        Input({'type': 'remove-specific-graph', 'index': ALL}, 'n_clicks'),
+        Input('parameter-graph', 'clickData'),  # ここを追加
+        Input('dynamic-graph', 'clickData'),    # ここを追加
+        State('graphs-container', 'children'),
+        prevent_initial_call=True
+    )
+    def remove_specific_graph(remove_graph_n_clicks, parameter_graph_clickData, dynamic_graph_clickData, existing_graphs):
+        print("Remove clicks:", remove_graph_n_clicks)
+        print("Parameter graph click data:", parameter_graph_clickData)
+        print("Dynamic graph click data:", dynamic_graph_clickData)
+        print("Existing graphs before removal:", existing_graphs)
+
+        # クリックデータがNoneの場合は何もしない
+        if parameter_graph_clickData is None and dynamic_graph_clickData is None:
+            return existing_graphs
+
+        # ここでのグラフ削除のロジック
+        if remove_graph_n_clicks:
+            for index, n_clicks in enumerate(remove_graph_n_clicks):
+                if n_clicks and n_clicks > 0 and existing_graphs:
+                    print(f"Removing graph at index {index}")
+                    existing_graphs.pop(index)
+                    break  # 1つのグラフだけ削除する
+        
+        print("Existing graphs after removal:", existing_graphs)
+        return existing_graphs
+
+
+    # コールバックを追加
+    @app.callback(
+        Output({'type': 'dynamic-graph', 'index': MATCH}, 'figure'),
+        Input({'type': 'dynamic-parameter-dropdown', 'index': MATCH}, 'value'),
+        Input('year-dropdown', 'value')
+    )
+    def update_dynamic_graph(selected_parameter, selected_year):
         if not calculated_results or selected_year is None or selected_parameter is None:
-            return existing_graphs  # 初期値に戻す場合
-
+            return {'data': [], 'layout': {}}
+        
         year_data = calculated_results.get(selected_year, {})
         attendance_numbers = [
             attendance_number for attendance_number in year_data.keys()
             if selected_parameter in year_data[attendance_number]
         ]
 
+        # データの作成
         y_values = [year_data[attendance_number][selected_parameter] for attendance_number in attendance_numbers]
-        
-        new_graph = dcc.Graph(
-            id={'type': 'dynamic-graph', 'index': len(existing_graphs)},
-            figure={
-                'data': [go.Bar(
-                    x=list(range(len(attendance_numbers))),
-                    y=y_values,
-                    text=attendance_numbers,
-                    textposition='outside',
-                    marker={'color': 'rgba(0, 128, 255, 0.6)'},
-                    name=f'{selected_parameter} (Year {selected_year})'
-                )],
-                'layout': go.Layout(
-                    title=f'{selected_parameter} for Year {selected_year}',
-                    xaxis={'title': '出席番号', 'tickvals': list(range(len(attendance_numbers))), 'ticktext': attendance_numbers},
-                    yaxis={'title': f'{selected_parameter} 値'},
-                    plot_bgcolor='rgba(240, 240, 240, 0.95)'
-                )
-            }
+        data = go.Bar(
+            x=list(range(len(attendance_numbers))),
+            y=y_values,
+            text=attendance_numbers,
+            textposition='outside',
+            marker={'color': 'rgba(255, 99, 71, 0.6)'},
+            name=f'{selected_parameter}'
         )
 
-        if add_graph_n_clicks > len(existing_graphs):
-            existing_graphs.append(new_graph)
-        elif remove_graph_n_clicks > 0 and existing_graphs:
-            existing_graphs.pop()
+        layout = {
+            'title': f'{selected_parameter} for {selected_year}',
+            'xaxis': {
+                'title': '出席番号',
+                'tickmode': 'array',
+                'tickvals': list(range(len(attendance_numbers))),
+                'ticktext': attendance_numbers,
+            },
+            'yaxis': {'title': f'{selected_parameter} 値'},
+            'barmode': 'group',
+            'plot_bgcolor': 'rgba(240, 240, 240, 0.95)'
+        }
 
-        return existing_graphs
+        return {'data': [data], 'layout': layout}
+
+
 
     @app.callback(
         Output('radar-chart', 'figure'),
@@ -149,10 +222,11 @@ def register_callbacks(app, calculated_results):
             selected_attendance_numbers = []  # 選択された出席番号をリセット
             return generate_radar_chart([], selected_year)  # 空のレーダーチャートを返す
 
-        print(f"clickData: {clickData}")
+        print(f"parameter_graph_clickData: {parameter_graph_clickData}")
+        print(f"dynamic_graph_clickData: {dynamic_graph_clickData}")
          # dynamic-graph も含めたクリックデータから attendance_number を取得
-        clickData = parameter_graph_clickData or next((data for data in dynamic_graph_clickData if data), None)
-
+        clickData = parameter_graph_clickData or next((data for data in reversed(dynamic_graph_clickData) if data), None)
+        print(f"clickData: {clickData}")
         # クリックデータが存在しない、または年が選択されていない場合
         if clickData is None or selected_year is None:
             print("clickData or selected_year is None")
