@@ -68,23 +68,42 @@ app.layout = html.Div([
     ], style={'display': 'flex', 'justify-content': 'center', 'padding': '10px'}),
     
     html.Div([
-        html.Button('Add Graph', id='add-graph-button', n_clicks=0),
-        html.Button('Remove Graph', id='remove-graph-button', n_clicks=0),
-        html.Button('Reset Radar Chart', id='reset-radar-button', n_clicks=0),  # リセットボタンを追加
+        html.Button('Reset Radar Chart', id='reset-radar-button', n_clicks=0),  # リセットボタンのみ残す
     ], style={'display': 'flex', 'justify-content': 'center', 'padding': '10px'}),
-    
-    html.Div(id='graphs-container', children=[
-        dcc.Graph(
-            id='parameter-graph',
-            figure={
-                'data': [],
-                'layout': {'title': 'グラフがありません'}
-            },
-            config={'displayModeBar': True, 'displaylogo': False},
-            style={'cursor': 'pointer'}
-        )
-    ]),
 
+    html.Div([
+            dcc.Dropdown(
+                id='extra-parameter-dropdown',
+                options=[
+                    {'label': '動画再生回数', 'value': 'video_start_count'},
+                    {'label': '音声再生回数', 'value': 'audio_start_count'},
+                    {'label': '回答回数', 'value': 'answer_count'},
+                    {'label': '回答時間', 'value': 'total_answer_time'},
+                    {'label': '正解数', 'value': 'correct_answers'},
+                    {'label': '不正解数', 'value': 'incorrect_answers'},
+                    {'label': '中断回数', 'value': 'suspended_count'},
+                    {'label': 'アプリ起動回数', 'value': 'launched_count'},
+                    {'label': '録音時間', 'value': 'recording_time'},
+                    {'label': '動画再生時間', 'value': 'video_time'},
+                    {'label': '録音回数', 'value': 'recorder_start_count'},
+                    {'label': '動画再生完了回数', 'value': 'movie_completed_count'},
+                    {'label': '復習回数', 'value': 'continue_count'},
+                    {'label': '成績', 'value': 'test_result'}   
+                ],
+                value=None,
+                placeholder="パラメータを選択してください",
+            ),
+        ], style={'width': '30%', 'display': 'inline-block'}),
+    
+    dcc.Graph(
+        id='parameter-graph',
+        figure={
+            'data': [],
+            'layout': {'title': 'グラフがありません'}
+        },
+        config={'displayModeBar': True, 'displaylogo': False},
+        style={'cursor': 'pointer'}
+    ),
     
     dcc.Graph(
         id='radar-chart',
