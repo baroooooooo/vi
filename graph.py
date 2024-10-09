@@ -2,6 +2,9 @@ import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output, State
 import plotly.graph_objs as go
+import plotly.express as px
+import pandas as pd
+import base64
 
 def register_callbacks(app, calculated_results):
     global selected_attendance_numbers
@@ -94,6 +97,71 @@ def register_callbacks(app, calculated_results):
         }
         
         return {'data': data, 'layout': layout}, existing_graphs
+    
+    @app.callback(
+        Output('multi-parameter-dropdown', 'value'),
+        Input('multi-parameter-dropdown', 'value')
+    )
+    def limit_dropdown_selection(selected_values):
+        if len(selected_values) > 2:  # 選択された値が2つを超えた場合
+            return selected_values[:2]  # 最初の2つだけを返す
+        return selected_values
+    
+    
+    @app.callback(
+        Output('hidden-div', 'children'),  # hidden divを出力として使う
+        Input('show-graph-button', 'n_clicks'),
+        State('year-dropdown', 'value'),
+        State('multi-parameter-dropdown', 'value')
+    )
+    def display_graph_and_open_window(show_clicks, selected_year, selected_parameters):
+        if show_clicks > 0:
+            # グラフを表示する処理
+            if selected_year not in calculated_results:
+                return dash.no_update  # データがない場合は何もしない
+
+            year_data = calculated_results[selected_year]
+
+            if selected_parameters and len(selected_parameters) == 2:
+                x_param, y_param = selected_parameters
+                
+                # データ処理
+                attendance_data = [
+                    (attendance_number,
+                    year_data[attendance_number].get(x_param, 0),
+                    year_data[attendance_number].get(y_param, 0))
+                    for attendance_number in year_data
+                    if year_data[attendance_number].get(x_param) is not None and \
+                    year_data[attendance_number].get(y_param) is not None
+                ]
+
+                if attendance_data:
+                    filtered_df = pd.DataFrame(attendance_data, columns=['attendance_number', x_param, y_param])
+                    
+                    # グラフ生成
+                    fig = px.scatter(
+                        filtered_df,
+                        x=x_param,
+                        y=y_param,
+                        title=f"{x_param} vs {y_param}",
+                        text=filtered_df['attendance_number']
+                    )
+                    
+                    # 新しいウィンドウを開くためのHTMLを生成
+                    graph_html = fig.to_html(full_html=False)
+                    graph_window = f"data:text/html;charset=utf-8,{base64.b64encode(graph_html.encode()).decode()}"
+                    
+                    # JavaScriptを実行してウィンドウを開くためのHTMLを返す
+                    return f"window.open('{graph_window}', '_blank');"
+        
+        return dash.no_update  # 変更がない場合は何もしない
+
+
+
+
+
+
+
 
 
 
@@ -103,13 +171,17 @@ def register_callbacks(app, calculated_results):
 
     @app.callback(
         Output('radar-chart', 'figure'),
-        [Input('parameter-graph', 'clickData'),
-         Input('year-dropdown', 'value'),
-         Input('reset-radar-button', 'n_clicks')]
+        [
+            Input('parameter-graph', 'clickData'),  # メイングラフ
+            Input('year-dropdown', 'value'),
+            Input('reset-radar-button', 'n_clicks')
+        ]
     )
     def display_radar_chart(parameter_graph_clickData, selected_year, reset_n_clicks):
         global selected_attendance_numbers
-        print(f"Click data: {parameter_graph_clickData}")
+        print(f"Main graph click data: {parameter_graph_clickData}")
+        print(f"Selected year: {selected_year}")
+        print(f"Selected attendance numbers: {selected_attendance_numbers}")
 
         # リセットボタンが押された場合
         if reset_n_clicks and dash.callback_context.triggered_id == 'reset-radar-button':
@@ -117,17 +189,20 @@ def register_callbacks(app, calculated_results):
             selected_attendance_numbers = []  # 選択された出席番号をリセット
             return generate_radar_chart([], selected_year)  # 空のレーダーチャートを返す
 
-        # クリックデータが存在するか確認
-        if parameter_graph_clickData is not None and 'points' in parameter_graph_clickData:
-            # 出席番号のみを取得
-            attendance_number = parameter_graph_clickData['points'][0].get('text', '').split(',')[0].replace('ID: ', '')
-            print(f"Selected attendance number: {attendance_number}")
+        attendance_number = None
+        # メイングラフのクリックデータを取得
+        if parameter_graph_clickData and 'points' in parameter_graph_clickData:
+            attendance_number = parameter_graph_clickData['points'][0]['label']
+            print(f"Selected attendance number from main graph: {attendance_number}")
 
-            # 新しい出席番号を選択リストに追加
-            if attendance_number and attendance_number not in selected_attendance_numbers:
-                selected_attendance_numbers.append(attendance_number)
-                print(f"Attendance number {attendance_number} added to selection")
+        # どちらもクリックされていない場合、更新しない
+        if not attendance_number:
+            return dash.no_update
 
+        # 出席番号が取得できた場合、リストに追加
+        if attendance_number not in selected_attendance_numbers:
+            selected_attendance_numbers.append(attendance_number)
+            print(f"Attendance number {attendance_number} added to selection")
 
         # 選択された出席番号に基づいてレーダーチャートを生成
         return generate_radar_chart(selected_attendance_numbers, selected_year)
@@ -167,49 +242,30 @@ def register_callbacks(app, calculated_results):
                 data.get('answer_count', 0) / overall_max_values['answer_count'] if overall_max_values['answer_count'] > 0 else 0,
                 data.get('correct_answers', 0) / overall_max_values['correct_answers'] if overall_max_values['correct_answers'] > 0 else 0,
                 data.get('incorrect_answers', 0) / overall_max_values['incorrect_answers'] if overall_max_values['incorrect_answers'] > 0 else 0,
-                data.get('suspended_count', 0) / overall_max_values['suspended_count'] if overall_max_values['suspended_count'] > 0 else 0,                    data.get('launched_count', 0) / overall_max_values['launched_count'] if overall_max_values['launched_count'] > 0 else 0,
+                data.get('suspended_count', 0) / overall_max_values['suspended_count'] if overall_max_values['suspended_count'] > 0 else 0,
+                data.get('launched_count', 0) / overall_max_values['launched_count'] if overall_max_values['launched_count'] > 0 else 0,
                 data.get('total_answer_time', 0) / overall_max_values['total_answer_time'] if overall_max_values['total_answer_time'] > 0 else 0,
                 data.get('recording_time', 0) / overall_max_values['recording_time'] if overall_max_values['recording_time'] > 0 else 0,
                 data.get('video_time', 0) / overall_max_values['video_time'] if overall_max_values['video_time'] > 0 else 0,
                 data.get('recorder_start_count', 0) / overall_max_values['recorder_start_count'] if overall_max_values['recorder_start_count'] > 0 else 0,
-                data.get('movie_completed_count', 0) / overall_max_values['movie_completed_count'] if overall_max_values['movie_completed_count'] > 0 else 0,                    data.get('continue_count', 0) / overall_max_values['continue_count'] if overall_max_values['continue_count'] > 0 else 0,
+                data.get('movie_completed_count', 0) / overall_max_values['movie_completed_count'] if overall_max_values['movie_completed_count'] > 0 else 0,
+                data.get('continue_count', 0) / overall_max_values['continue_count'] if overall_max_values['continue_count'] > 0 else 0,
                 data.get('test_result', 0) / overall_max_values['test_result'] if overall_max_values['test_result'] > 0 else 0,
             ]
 
             radar_traces.append(go.Scatterpolar(
-                r=normalized_values + [normalized_values[0]],  # 最後の点を最初の点に戻す
+                r=normalized_values + [normalized_values[0]],  # 閉じた図形にするために最初の値を追加
                 theta=[
-                    'video_start_count',
-                    'audio_start_count',
-                    'answer_count',
-                    'correct_answers',
-                    'incorrect_answers',
-                    'suspended_count',
-                    'launched_count',
-                    'total_answer_time',
-                    'recording_time',
-                    'video_time',
-                    'recorder_start_count',
-                    'movie_completed_count',
-                    'continue_count',
-                    'test_result'
-                ] + ['video_start_count'],  # 閉じるために最初の項目を追加
-                fill='toself',
-                name=attendance_number,
+                    'video_start_count', 'audio_start_count', 'answer_count', 'correct_answers',
+                    'incorrect_answers', 'suspended_count', 'launched_count', 'total_answer_time',
+                    'recording_time', 'video_time', 'recorder_start_count', 'movie_completed_count',
+                    'continue_count', 'test_result', 'video_start_count'
+                ],
+                name=f'Attendance {attendance_number}',
+                fill='toself'
             ))
 
         return {
             'data': radar_traces,
-            'layout': go.Layout(
-                title='選択された出席番号のレーダーチャート',
-                polar=dict(
-                    radialaxis=dict(
-                        visible=True,
-                        range=[0, 1]
-                    )
-                ),
-                showlegend=True
-            )
+            'layout': go.Layout(title='レーダーチャート', polar={'radialaxis': {'visible': True}}, showlegend=True)
         }
-
-        
