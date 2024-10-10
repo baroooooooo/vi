@@ -4,7 +4,8 @@ from dash.dependencies import Input, Output, State
 import plotly.graph_objs as go
 import plotly.express as px
 import pandas as pd
-import base64
+
+
 
 def register_callbacks(app, calculated_results):
     global selected_attendance_numbers
@@ -19,11 +20,10 @@ def register_callbacks(app, calculated_results):
         Input('order-number', 'n_clicks'),
         Input('order-asc', 'n_clicks'),
         Input('order-desc', 'n_clicks'),
-        [State('graph-data', 'data')]
     )
-    def update_graph(selected_year, selected_parameter, selected_extra_parameter, order_number, order_asc, order_desc, existing_graphs):
+    def update_bar_graph(selected_year, selected_parameter, selected_extra_parameter, order_number, order_asc, order_desc):
         if not calculated_results or selected_year is None or selected_parameter is None:
-            return {'data': [], 'layout': {}}, existing_graphs
+            return {'data': [], 'layout': {}}, None
 
         year_data = calculated_results.get(selected_year, {})
         
@@ -44,21 +44,20 @@ def register_callbacks(app, calculated_results):
         elif triggered_id == 'order-number':
             attendance_data.sort(key=lambda x: int(x[0]))  # 出席番号でソート
 
-        # ソート済みの出席番号と値をリストに格納
         attendance_numbers = [x[0] for x in attendance_data]
         y_values_original = [x[1] for x in attendance_data]
         y_values_extra = [x[2] for x in attendance_data]
 
         if not attendance_numbers:  # データが存在しない場合
-            return {'data': [], 'layout': {'title': 'No data available'}}, existing_graphs
+            return {'data': [], 'layout': {'title': 'No data available'}}, None
 
         # メインパラメータの最大値を取得して正規化
-        max_original_value = max(y_values_original) if y_values_original else 1  # 最大値が0の場合を避けるためデフォルト値を設定
-        normalized_y_values_original = [value / max_original_value for value in y_values_original]  # 正規化
+        max_original_value = max(y_values_original) if y_values_original else 1
+        normalized_y_values_original = [value / max_original_value for value in y_values_original]
 
         # サブパラメータの最大値を取得して正規化
-        max_extra_value = max(y_values_extra) if y_values_extra else 1  # 最大値が0の場合を避けるためデフォルト値を設定
-        normalized_y_values_extra = [value / max_extra_value for value in y_values_extra]  # 正規化
+        max_extra_value = max(y_values_extra) if y_values_extra else 1
+        normalized_y_values_extra = [value / max_extra_value for value in y_values_extra]
 
         # メインパラメータの棒グラフトレース
         original_data = go.Bar(
@@ -68,36 +67,89 @@ def register_callbacks(app, calculated_results):
             textposition='outside',
             marker={'color': 'rgba(255, 99, 71, 0.6)'},
             name=f'{selected_parameter} (Main)',
-            width=0.4  # 幅を狭めてバー同士が重ならないように
+            width=0.4,
+            hovertemplate=[
+                f'Attendance Number: {attendance_numbers[i]}<br>{selected_parameter}: {normalized_y_values_original[i]:.2f}<br>Original Value: {y_values_original[i]}<extra></extra>'
+                for i in range(len(attendance_numbers))
+            ]
         )
 
         # サブパラメータの棒グラフトレース
         extra_data_trace = go.Bar(
             x=attendance_numbers,
-            y=normalized_y_values_extra,  # 正規化したサブパラメータの値を使用
+            y=normalized_y_values_extra,
             marker={'color': 'rgba(100, 150, 255, 0.6)'},
             name=f'{selected_extra_parameter} (Extra)',
-            width=0.4  # 幅を狭めてバー同士が重ならないように
+            width=0.4,
+            hovertemplate=[
+                f'Attendance Number: {attendance_numbers[i]}<br>{selected_extra_parameter}: {normalized_y_values_extra[i]:.2f}<br>Original Value: {y_values_extra[i]}<extra></extra>'
+                for i in range(len(attendance_numbers))
+            ]
         )
 
         data = [original_data, extra_data_trace]
 
         layout = {
             'title': f'{selected_parameter} and {selected_extra_parameter} for {selected_year}',
-            'xaxis': {
-                'title': '出席番号',
-                'type': 'category',  # 存在する出席番号のみをカテゴリとして表示
-            },
-            'yaxis': {'title': 'Normalized Values'},  # 正規化した値に応じたY軸のタイトル
-            'barmode': 'group',  # 同じグラフで並べて表示
+            'xaxis': {'title': '出席番号', 'type': 'category'},
+            'yaxis': {'title': 'Normalized Values'},
+            'barmode': 'group',
             'plot_bgcolor': 'rgba(240, 240, 240, 0.95)',
-            'bargap': 0.1,  # バー間の隙間を調整
-            'bargroupgap': 0.1,  # グループ間の隙間を調整
-            'autosize': True  # レイアウトのサイズを自動調整
+            'bargap': 0.1,
+            'bargroupgap': 0.1,
+            'autosize': True,
         }
-        
-        return {'data': data, 'layout': layout}, existing_graphs
+
+        return {'data': data, 'layout': layout}, None
+
     
+
+    @app.callback(
+        Output('popup-graph', 'figure'),
+        Input('x-parameter-dropdown', 'value'),  # X軸の入力
+        Input('y-parameter-dropdown', 'value'),  # Y軸の入力
+        Input('year-dropdown', 'value')
+    )
+    def update_scatter_plot(x_param, y_param, selected_year):
+        if x_param and y_param and selected_year:
+            year_data = calculated_results.get(selected_year, {})
+
+            attendance_data_popup = [
+                (attendance_number,
+                year_data[attendance_number].get(x_param, 0),
+                year_data[attendance_number].get(y_param, 0))
+                for attendance_number in year_data
+                if year_data[attendance_number].get(x_param) is not None and \
+                year_data[attendance_number].get(y_param) is not None
+            ]
+
+            # データフレームを生成
+            if attendance_data_popup:
+                filtered_df = pd.DataFrame(attendance_data_popup, columns=['attendance_number', x_param, y_param])
+                print("Filtered DataFrame columns:", filtered_df.columns)
+
+                # グラフ生成
+                parameter_fig = px.scatter(
+                    filtered_df,
+                    x=x_param,
+                    y=y_param,
+                    title=f"X軸{x_param}Y軸{y_param}の散布図",
+                    text='attendance_number'  # IDを表示
+                )
+
+                # IDの位置を下に設定
+                parameter_fig.update_traces(textposition='bottom center')
+
+                print("Parameter graph displayed")
+                return parameter_fig
+            else:
+                print("No valid attendance data found for parameter graph")
+                return {}  # データが無い場合の処理
+        else:
+            print("Please select both parameters and a year")
+            return {}
+
+
     @app.callback(
         Output('multi-parameter-dropdown', 'value'),
         Input('multi-parameter-dropdown', 'value')
@@ -106,68 +158,6 @@ def register_callbacks(app, calculated_results):
         if len(selected_values) > 2:  # 選択された値が2つを超えた場合
             return selected_values[:2]  # 最初の2つだけを返す
         return selected_values
-    
-    
-    @app.callback(
-        Output('hidden-div', 'children'),  # hidden divを出力として使う
-        Input('show-graph-button', 'n_clicks'),
-        State('year-dropdown', 'value'),
-        State('multi-parameter-dropdown', 'value')
-    )
-    def display_graph_and_open_window(show_clicks, selected_year, selected_parameters):
-        if show_clicks > 0:
-            # グラフを表示する処理
-            if selected_year not in calculated_results:
-                return dash.no_update  # データがない場合は何もしない
-
-            year_data = calculated_results[selected_year]
-
-            if selected_parameters and len(selected_parameters) == 2:
-                x_param, y_param = selected_parameters
-                
-                # データ処理
-                attendance_data = [
-                    (attendance_number,
-                    year_data[attendance_number].get(x_param, 0),
-                    year_data[attendance_number].get(y_param, 0))
-                    for attendance_number in year_data
-                    if year_data[attendance_number].get(x_param) is not None and \
-                    year_data[attendance_number].get(y_param) is not None
-                ]
-
-                if attendance_data:
-                    filtered_df = pd.DataFrame(attendance_data, columns=['attendance_number', x_param, y_param])
-                    
-                    # グラフ生成
-                    fig = px.scatter(
-                        filtered_df,
-                        x=x_param,
-                        y=y_param,
-                        title=f"{x_param} vs {y_param}",
-                        text=filtered_df['attendance_number']
-                    )
-                    
-                    # 新しいウィンドウを開くためのHTMLを生成
-                    graph_html = fig.to_html(full_html=False)
-                    graph_window = f"data:text/html;charset=utf-8,{base64.b64encode(graph_html.encode()).decode()}"
-                    
-                    # JavaScriptを実行してウィンドウを開くためのHTMLを返す
-                    return f"window.open('{graph_window}', '_blank');"
-        
-        return dash.no_update  # 変更がない場合は何もしない
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     @app.callback(
         Output('radar-chart', 'figure'),
@@ -202,9 +192,7 @@ def register_callbacks(app, calculated_results):
         # 出席番号が取得できた場合、リストに追加
         if attendance_number not in selected_attendance_numbers:
             selected_attendance_numbers.append(attendance_number)
-            print(f"Attendance number {attendance_number} added to selection")
 
-        # 選択された出席番号に基づいてレーダーチャートを生成
         return generate_radar_chart(selected_attendance_numbers, selected_year)
 
 
@@ -267,5 +255,14 @@ def register_callbacks(app, calculated_results):
 
         return {
             'data': radar_traces,
-            'layout': go.Layout(title='レーダーチャート', polar={'radialaxis': {'visible': True}}, showlegend=True)
+            'layout': go.Layout(
+                title='レーダーチャート',
+                polar={
+                    'radialaxis': {
+                        'visible': True,
+                        'range': [0, 1],  # レーダーチャートの範囲を0~1に設定
+                    }
+                },
+                showlegend=True
+            )
         }
