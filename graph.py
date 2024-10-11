@@ -4,12 +4,19 @@ from dash.dependencies import Input, Output, State
 import plotly.graph_objs as go
 import plotly.express as px
 import pandas as pd
+import numpy as np
 
 
 
 def register_callbacks(app, calculated_results):
     global selected_attendance_numbers
     selected_attendance_numbers = []
+
+    # 異常検知機能用
+    def detect_outliers(data, threshold=3.0):
+        mean = np.mean(data)
+        std_dev = np.std(data)
+        return [x if abs(x - mean) <= threshold * std_dev else 0 for x in data]
 
     @app.callback(
         Output('parameter-graph', 'figure'),
@@ -20,8 +27,9 @@ def register_callbacks(app, calculated_results):
         Input('order-number', 'n_clicks'),
         Input('order-asc', 'n_clicks'),
         Input('order-desc', 'n_clicks'),
+        Input('toggle-outliers', 'n_clicks'),
     )
-    def update_bar_graph(selected_year, selected_parameter, selected_extra_parameter, order_number, order_asc, order_desc):
+    def update_bar_graph(selected_year, selected_parameter, selected_extra_parameter, order_number, order_asc, order_desc, toggle_outliers):
         if not calculated_results or selected_year is None or selected_parameter is None:
             return {'data': [], 'layout': {}}, None
 
@@ -50,42 +58,71 @@ def register_callbacks(app, calculated_results):
 
         if not attendance_numbers:  # データが存在しない場合
             return {'data': [], 'layout': {'title': 'No data available'}}, None
+        
+        # 外れ値の検出と切り替え
+        use_outliers = toggle_outliers % 2 == 1 if toggle_outliers else False
 
-        # メインパラメータの最大値を取得して正規化
-        max_original_value = max(y_values_original) if y_values_original else 1
-        normalized_y_values_original = [value / max_original_value for value in y_values_original]
+        # メインパラメータの外れ値処理
+        if use_outliers:
+            processed_y_values_original = detect_outliers(y_values_original)
+        else:
+            processed_y_values_original = y_values_original
 
-        # サブパラメータの最大値を取得して正規化
-        max_extra_value = max(y_values_extra) if y_values_extra else 1
-        normalized_y_values_extra = [value / max_extra_value for value in y_values_extra]
+        # 最大値を取得し、正規化
+        max_original_value = max(processed_y_values_original) if processed_y_values_original else 1
+        normalized_y_values_original = [value / max_original_value for value in processed_y_values_original]
 
-        # メインパラメータの棒グラフトレース
+        # サブパラメータの外れ値処理
+        if use_outliers:
+            processed_y_values_extra = detect_outliers(y_values_extra)
+        else:
+            processed_y_values_extra = y_values_extra
+
+        # 最大値を取得し、正規化
+        max_extra_value = max(processed_y_values_extra) if processed_y_values_extra else 1
+        normalized_y_values_extra = [value / max_extra_value for value in processed_y_values_extra]
+
+
+        # メインパラメータの棒グラフトレース（外れ値は透過）
         original_data = go.Bar(
             x=attendance_numbers,
-            y=normalized_y_values_original,
-            text=[f"ID: {num}, {selected_extra_parameter}: {y_values_extra[i]}" for i, num in enumerate(attendance_numbers)],
+            y=normalized_y_values_original,  # 正規化された値を表示
+            text=[f"ID: {num}, {selected_parameter}: {normalized_y_values_original[i]:.2f}" for i, num in enumerate(attendance_numbers)],
             textposition='outside',
-            marker={'color': 'rgba(255, 99, 71, 0.6)'},
+            marker={
+                'color': [
+                    'rgba(255, 99, 71, 0.6)' if value in processed_y_values_original and value == 0 else 'rgba(255, 99, 71, 1)' 
+                    for value in y_values_original
+                ]
+            },
             name=f'{selected_parameter} (Main)',
             width=0.4,
             hovertemplate=[
-                f'Attendance Number: {attendance_numbers[i]}<br>{selected_parameter}: {normalized_y_values_original[i]:.2f}<br>Original Value: {y_values_original[i]}<extra></extra>'
+                f'Attendance Number: {attendance_numbers[i]}<br>{selected_parameter}: {normalized_y_values_original[i]:.2f}<br>Original Value: {y_values_original[i]}<extra></extra>' 
                 for i in range(len(attendance_numbers))
             ]
         )
 
-        # サブパラメータの棒グラフトレース
+
+        # サブパラメータの棒グラフトレース（外れ値は透過）
         extra_data_trace = go.Bar(
             x=attendance_numbers,
-            y=normalized_y_values_extra,
-            marker={'color': 'rgba(100, 150, 255, 0.6)'},
+            y=normalized_y_values_extra,  # 正規化された値を表示
+            marker={
+                'color': [
+                    'rgba(100, 150, 255, 0.6)' if value in processed_y_values_extra and value == 0 else 'rgba(100, 150, 255, 1)' 
+                    for value in y_values_extra
+                ]
+            },
             name=f'{selected_extra_parameter} (Extra)',
             width=0.4,
             hovertemplate=[
-                f'Attendance Number: {attendance_numbers[i]}<br>{selected_extra_parameter}: {normalized_y_values_extra[i]:.2f}<br>Original Value: {y_values_extra[i]}<extra></extra>'
+                f'Attendance Number: {attendance_numbers[i]}<br>{selected_extra_parameter}: {normalized_y_values_extra[i]:.2f}<br>Original Value: {y_values_extra[i]}<extra></extra>' 
                 for i in range(len(attendance_numbers))
             ]
         )
+
+
 
         data = [original_data, extra_data_trace]
 
@@ -108,9 +145,10 @@ def register_callbacks(app, calculated_results):
         Output('popup-graph', 'figure'),
         Input('x-parameter-dropdown', 'value'),  # X軸の入力
         Input('y-parameter-dropdown', 'value'),  # Y軸の入力
-        Input('year-dropdown', 'value')
+        Input('year-dropdown', 'value'),
+        Input('toggle-outliers', 'n_clicks'),  # 外れ値を除外するトグルボタン
     )
-    def update_scatter_plot(x_param, y_param, selected_year):
+    def update_scatter_plot(x_param, y_param, selected_year, toggle_outliers):
         if x_param and y_param and selected_year:
             year_data = calculated_results.get(selected_year, {})
 
@@ -126,14 +164,23 @@ def register_callbacks(app, calculated_results):
             # データフレームを生成
             if attendance_data_popup:
                 filtered_df = pd.DataFrame(attendance_data_popup, columns=['attendance_number', x_param, y_param])
-                print("Filtered DataFrame columns:", filtered_df.columns)
+
+                # 外れ値の検出と除外
+                use_outliers = toggle_outliers % 2 == 1 if toggle_outliers else False
+                if use_outliers:
+                    # 外れ値を0に設定
+                    filtered_df[x_param] = detect_outliers(filtered_df[x_param])
+                    filtered_df[y_param] = detect_outliers(filtered_df[y_param])
+                else:
+                    filtered_df[x_param] = filtered_df[x_param]
+                    filtered_df[y_param] = filtered_df[y_param]
 
                 # グラフ生成
                 parameter_fig = px.scatter(
                     filtered_df,
                     x=x_param,
                     y=y_param,
-                    title=f"X軸{x_param}Y軸{y_param}の散布図",
+                    title=f"X軸 {x_param} Y軸 {y_param} の散布図",
                     text='attendance_number'  # IDを表示
                 )
 
@@ -148,6 +195,9 @@ def register_callbacks(app, calculated_results):
         else:
             print("Please select both parameters and a year")
             return {}
+
+
+
 
 
     @app.callback(

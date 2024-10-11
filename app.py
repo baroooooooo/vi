@@ -39,6 +39,8 @@ app.layout = html.Div([
             ),
         ], style={'width': '30%', 'display': 'inline-block', 'margin': '0 10px'}),
 
+        html.Button('外れ値の除外ボタン', id='toggle-outliers', n_clicks=0),
+
         html.Div([
             dcc.Dropdown(
                 id='parameter-dropdown',

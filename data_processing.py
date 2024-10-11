@@ -64,6 +64,7 @@ def calculate_counts_and_times(data):
                         if 'duration' in res:
                             duration = int(res.get('duration', 0))
                             total_answer_time += duration
+                            total_answer_time = total_answer_time / 3600 # 秒を時間に変換
 
             # 録音時間と動画再生時間の合計
             if any(verb.get('display') == 'completed' for verb in verbs):
@@ -79,8 +80,10 @@ def calculate_counts_and_times(data):
                     duration = int(result.get('duration', 0))
                     if 'recorder' in objects[0].get('objectId', ''):
                         recording_time += duration
+                        recording_time = recording_time / 3600 # 秒を時間に変換
                     elif 'movie' in objects[0].get('objectId', ''):
                         video_time += duration
+                        video_time = video_time / 3600 # 秒を時間に変換
 
             if any(verb.get('display') == 'started' and 'recorder' in obj.get('objectId', '') for verb in verbs for obj in objects):
                 recorder_start_count += 1
