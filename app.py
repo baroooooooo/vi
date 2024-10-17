@@ -4,7 +4,8 @@ from dash import dcc, html
 from dash.dependencies import Input, Output, State
 from flask import Flask, redirect
 from graph import register_callbacks
-from in_it import prepare_data, load_data_result  # load_result_dataをインポート
+from in_it import prepare_and_collect_data, load_data_result  # load_result_dataをインポート
+from data_processing import create_3d_plot
 
 # Flaskサーバーの作成
 server = Flask(__name__)
@@ -18,7 +19,7 @@ result_file = os.path.join('vi/results', 'data_result.csv')  # 成績データ�
 
 # 成績データを読み込み
 result_data = load_data_result()  # ここでresult_dataを読み込む
-calculated_results = prepare_data(directory, result_data)  # result_dataを追加
+calculated_results, all_extracted_data = prepare_and_collect_data(directory, result_data)  # result_dataを追加
 
 # 年度のオプションを追加
 years = list(calculated_results.keys())  # ディレクトリから取得した年
@@ -151,6 +152,15 @@ app.layout = html.Div([
     html.Div([  # レーダーチャートのリセットボタン
         html.Button('Reset Radar Chart', id='reset-radar-button', n_clicks=0),
     ], style={'display': 'flex', 'justify-content': 'center', 'padding': '10px'}),
+    dcc.RadioItems(
+        id='unit-type-selector',
+        options=[
+            {'label': 'Main Unit', 'value': 'MainUnit'},
+            {'label': 'Basic Unit', 'value': 'BasicUnit'}
+        ],
+        value='MainUnit',  # デフォルトでは 'MainUnit' が選択される
+        labelStyle={'display': 'inline-block'}
+    ),
 
     dcc.Graph(
         id='parameter-graph',
@@ -168,6 +178,15 @@ app.layout = html.Div([
         id='radar-chart',
         style={'height': '70vh', 'overflowX': 'auto'}
     ),
+    html.Div([
+        dcc.Graph(
+            id='3d-graph',  # 初期の空のグラフとして設定
+            style={
+                'height': '800px',  # グラフの高さを制限
+                'margin': 'auto'
+            }
+        )
+    ], style={'text-align': 'center'}),
 
     dcc.Store(id='graph-data', data=[]),
     dcc.Store(id='selected-attendance-numbers', data=[]),
@@ -175,7 +194,7 @@ app.layout = html.Div([
 
 
 # コールバックの設定
-register_callbacks(app, calculated_results)
+register_callbacks(app, calculated_results, all_extracted_data)
 
 @server.route('/')
 def index():

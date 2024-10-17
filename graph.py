@@ -5,10 +5,11 @@ import plotly.graph_objs as go
 import plotly.express as px
 import pandas as pd
 import numpy as np
+import os
+from in_it import parse_objectId
 
 
-
-def register_callbacks(app, calculated_results):
+def register_callbacks(app, calculated_results, all_extracted_data):
     global selected_attendance_numbers
     selected_attendance_numbers = []
 
@@ -198,17 +199,6 @@ def register_callbacks(app, calculated_results):
 
 
 
-
-
-    @app.callback(
-        Output('multi-parameter-dropdown', 'value'),
-        Input('multi-parameter-dropdown', 'value')
-    )
-    def limit_dropdown_selection(selected_values):
-        if len(selected_values) > 2:  # 選択された値が2つを超えた場合
-            return selected_values[:2]  # 最初の2つだけを返す
-        return selected_values
-
     @app.callback(
         Output('radar-chart', 'figure'),
         [
@@ -316,3 +306,65 @@ def register_callbacks(app, calculated_results):
                 showlegend=True
             )
         }
+    import plotly.graph_objs as go
+
+    @app.callback(
+        Output('3d-graph', 'figure'),
+        [Input('year-dropdown', 'value'),
+        Input('unit-type-selector', 'value')]  # 追加: ユニットの種類を選択
+    )
+    def update_3d_graph(selected_year, unit_type):
+        try:
+            print("All Extracted Data: ", all_extracted_data)  # この行で全てのデータを出力
+
+            if not all_extracted_data:
+                print("No data available in all_extracted_data.")
+                return go.Figure()
+
+            # デバッグ用に、フィルタリングの前にデータを出力
+            print(f"Selected Year: {selected_year}, Unit Type: {unit_type}")
+
+            # データをフィルタリング
+            filtered_data = [data for data in all_extracted_data if str(data.get('Year')) == str(selected_year) and data.get('UnitType') == unit_type]
+
+            # フィルタリング後のデータを出力
+            print(f"Filtered Data: {filtered_data}")
+
+            if not filtered_data:
+                print(f"No data available for the selected year: {selected_year} and unit: {unit_type}")
+                return go.Figure()  # 空のグラフを返す
+
+            # X, Y, Z の軸を抽出または計算する
+            try:
+                x_vals = [data['ID'] for data in filtered_data]
+                y_vals = [data['UnitNumber'] for data in filtered_data]
+                z_vals = [data['timeStamp'].timestamp() for data in filtered_data]
+            except KeyError as e:
+                print(f"KeyError occurred: {e}")
+                return go.Figure()
+
+            # 3Dラインプロットを作成
+            fig = go.Figure(data=[go.Scatter3d(
+                x=x_vals,
+                y=y_vals,
+                z=z_vals,
+                mode='lines',
+                line=dict(color='blue', width=2)
+            )])
+
+            fig.update_layout(
+                scene=dict(
+                    xaxis_title='ID',
+                    yaxis_title=f'{unit_type} Unit Number',
+                    zaxis_title='Timestamp'
+                ),
+                title=f'3D Line Plot for {unit_type} and Year {selected_year}' if selected_year else f'3D Line Plot of All Data',
+                margin=dict(l=0, r=0, b=0, t=0)
+            )
+
+            return fig
+
+        except Exception as e:
+            print(f"Error occurred: {e}")
+            return go.Figure()
+
