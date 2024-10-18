@@ -1,5 +1,9 @@
 import pandas as pd
 import json
+from dateutil import parser
+import plotly.graph_objs as go
+import os
+
 
 COLUMNS = ['actor', 'timeStamp', 'object', 'result', 'verb', 'extension']
 
@@ -182,3 +186,68 @@ def clean_and_parse_json(data, column):
         except (json.JSONDecodeError, TypeError):
             continue
     return cleaned_data
+
+
+
+
+
+def create_3d_plot(all_data):
+    # 辞書のリストをDataFrameに変換
+    df = pd.DataFrame(all_data)
+
+    if df.empty:
+        print("プロットするデータがありません。")
+        return go.Figure()
+
+    # プロット用のデータを準備
+    df['ID'] = df['ID'].astype(str)
+    df['Unit'] = df['Unit'].astype(str)
+
+    # 'timeStamp' を datetime に変換し、数値に変換
+    try:
+        df['timeStamp'] = pd.to_datetime(df['timeStamp'], errors='coerce')  # 無効なデータはNaTにする
+        df['timeStamp_numeric'] = df['timeStamp'].astype('int64')  # datetimeを数値に変換
+    except Exception as e:
+        print(f"Error converting timeStamp: {e}")
+        return go.Figure()  # エラー発生時は空のグラフを返す
+
+    # 'Unit' を y軸用の数値にマッピング
+    unit_labels = df['Unit'].unique()
+    unit_mapping = {unit: idx for idx, unit in enumerate(unit_labels)}
+    df['Unit_numeric'] = df['Unit'].map(unit_mapping)
+
+    # 'ID' を x軸用の数値にマッピング
+    id_labels = df['ID'].unique()
+    id_mapping = {id_: idx for idx, id_ in enumerate(id_labels)}
+    df['ID_numeric'] = df['ID'].map(id_mapping)
+
+    # 3D散布図を作成
+    fig = go.Figure(data=[go.Scatter3d(
+        x=df['ID_numeric'],
+        y=df['Unit_numeric'],
+        z=df['timeStamp_numeric'],
+        mode='markers',
+        marker=dict(
+            size=5,
+            color=df['timeStamp_numeric'],  # timeStampをカラースケールに使用
+            colorscale='Viridis',
+            opacity=0.8
+        ),
+        text=[f"ID: {row['ID']}<br>Unit: {row['Unit']}<br>Time: {row['timeStamp']}" for index, row in df.iterrows()],
+        hoverinfo='text'
+    )])
+
+    # レイアウトを更新
+    fig.update_layout(
+        scene=dict(
+            xaxis=dict(title='ID', tickvals=list(id_mapping.values()), ticktext=list(id_mapping.keys())),
+            yaxis=dict(title='Unit', tickvals=list(unit_mapping.values()), ticktext=list(unit_mapping.keys())),
+            zaxis=dict(title='Time')
+        ),
+        margin=dict(r=0, b=0, l=0, t=0),
+        title='ID vs Unit vs TimeStamp の3Dプロット'
+    )
+
+    return fig
+
+
