@@ -172,21 +172,28 @@ app.layout = html.Div([
         style={'cursor': 'pointer'}
     ),
 
-     dcc.Graph(id='popup-graph', style={'height': '80vh', 'width': '100%'}),  # ポップアップグラフも大きく
+    dcc.Graph(id='popup-graph', style={'height': '80vh', 'width': '100%'}),  # ポップアップグラフも大きく
 
     dcc.Graph(
         id='radar-chart',
         style={'height': '70vh', 'overflowX': 'auto'}
     ),
     html.Div([
-        dcc.Graph(
-            id='3d-graph',  # 初期の空のグラフとして設定
-            style={
-                'height': '800px',  # グラフの高さを制限
-                'margin': 'auto'
-            }
-        )
-    ], style={'text-align': 'center'}),
+        dcc.Dropdown(
+            id='month-dropdown',
+            options=[{'label': f'{month}月', 'value': month} for month in range(1, 13)],
+            placeholder="月を選択",
+        ),
+        dcc.Dropdown(
+            id='day-dropdown',
+            options=[{'label': f'{day}日', 'value': day} for day in range(1, 32)],
+            placeholder="日にちを選択",
+        ),
+        html.Div([  # 3次元グラフのリセットボタン
+            html.Button('Reset Graph', id='reset-button', n_clicks=0),
+        ], style={'display': 'flex', 'justify-content': 'center', 'padding': '10px'}),
+        dcc.Graph(id='3d-graph'),
+    ]),
 
     dcc.Store(id='graph-data', data=[]),
     dcc.Store(id='selected-attendance-numbers', data=[]),

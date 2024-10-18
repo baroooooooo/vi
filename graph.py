@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import os
 from in_it import parse_objectId
+from datetime import datetime
 
 
 def register_callbacks(app, calculated_results, all_extracted_data):
@@ -306,65 +307,142 @@ def register_callbacks(app, calculated_results, all_extracted_data):
                 showlegend=True
             )
         }
-    import plotly.graph_objs as go
-
+    
     @app.callback(
-        Output('3d-graph', 'figure'),
-        [Input('year-dropdown', 'value'),
-        Input('unit-type-selector', 'value')]  # 追加: ユニットの種類を選択
+        Output('3d-graph', 'figure'),  # 3DグラフのID
+        [Input('parameter-graph', 'clickData'),  # メイングラフのクリックイベント
+        Input('reset-button', 'n_clicks'),  # リセットボタンのクリックイベント
+        Input('year-dropdown', 'value'),  # 年選択
+        Input('month-dropdown', 'value'),  # 月選択
+        Input('day-dropdown', 'value'),  # 日選択
+        Input('unit-type-selector', 'value')]  # ユニットタイプの選択 (Basic Unit, Main Unit)
     )
-    def update_3d_graph(selected_year, unit_type):
-        try:
-            print("All Extracted Data: ", all_extracted_data)  # この行で全てのデータを出力
+    def display_2d_or_3d_graph(click_data, reset_n_clicks, selected_year, selected_month, selected_day, unit_type):
+        global selected_attendance_numbers
 
-            if not all_extracted_data:
-                print("No data available in all_extracted_data.")
-                return go.Figure()
+        # リセットボタンが押された場合の処理
+        if reset_n_clicks and dash.callback_context.triggered_id == 'reset-button':
+            print("Reset button clicked")
+            selected_attendance_numbers = []  # 選択された出席番号をリセット
+            return dash.no_update  # グラフの更新を行わない
 
-            # デバッグ用に、フィルタリングの前にデータを出力
-            print(f"Selected Year: {selected_year}, Unit Type: {unit_type}")
+        attendance_number = None
+        # メイングラフのクリックデータを取得
+        if click_data and 'points' in click_data:
+            attendance_number = click_data['points'][0]['label']
+            print(f"Selected attendance number from main graph: {attendance_number}")
 
-            # データをフィルタリング
-            filtered_data = [data for data in all_extracted_data if str(data.get('Year')) == str(selected_year) and data.get('UnitType') == unit_type]
+        # どちらもクリックされていない場合、更新しない
+        if not attendance_number:
+            return dash.no_update
 
-            # フィルタリング後のデータを出力
-            print(f"Filtered Data: {filtered_data}")
+        # 出席番号が取得できた場合、リストに追加（重複しないように）
+        if attendance_number not in selected_attendance_numbers:
+            selected_attendance_numbers.append(attendance_number)
 
-            if not filtered_data:
-                print(f"No data available for the selected year: {selected_year} and unit: {unit_type}")
-                return go.Figure()  # 空のグラフを返す
+        # デバッグ: フィルタリング条件の確認
+        print(f"Selected year: {selected_year}")
+        print(f"Selected month: {selected_month}")
+        print(f"Selected day: {selected_day}")
+        print(f"Unit type: {unit_type}")
+        print(f"Selected attendance numbers: {selected_attendance_numbers}")
 
-            # X, Y, Z の軸を抽出または計算する
-            try:
-                x_vals = [data['ID'] for data in filtered_data]
-                y_vals = [data['UnitNumber'] for data in filtered_data]
-                z_vals = [data['timeStamp'].timestamp() for data in filtered_data]
-            except KeyError as e:
-                print(f"KeyError occurred: {e}")
-                return go.Figure()
+        # 月、日、ユニットタイプに基づいてデータをフィルタリング
+        filtered_data = [data for data in all_extracted_data
+                        if data['ID'] in selected_attendance_numbers
+                        and data['Year'] == selected_year
+                        and (not selected_month or data['timeStamp'].month == selected_month)
+                        and (not selected_day or data['timeStamp'].day == selected_day)
+                        and data['UnitType'] == unit_type]  # Basic Unit または Main Unit
 
-            # 3Dラインプロットを作成
-            fig = go.Figure(data=[go.Scatter3d(
+        # デバッグ: フィルタリング後のデータ確認
+        print(f"Filtered data: {filtered_data}")
+
+        if not filtered_data:
+            print("No data available for the selected filters.")
+            return dash.no_update
+
+        # 1人だけ選択されている場合は2Dグラフを表示
+        if len(selected_attendance_numbers) == 1:
+            return generate_2d_graph(selected_attendance_numbers[0], selected_year, selected_month, selected_day, unit_type)
+
+        # 2人以上選択されている場合は3Dグラフを表示
+        return generate_3d_graph(selected_attendance_numbers, selected_year, selected_month, selected_day, unit_type)
+
+    def generate_2d_graph(attendance_number, selected_year, selected_month, selected_day, unit_type):
+        # 選択された出席番号のデータを使用して2Dグラフを作成
+        filtered_data = [data for data in all_extracted_data
+                        if data['ID'] == attendance_number
+                        and data['Year'] == selected_year
+                        and (not selected_month or data['timeStamp'].month == selected_month)
+                        and (not selected_day or data['timeStamp'].day == selected_day)
+                        and data['UnitType'] == unit_type]
+
+        if not filtered_data:
+            print(f"No data available for 2D graph for Attendance {attendance_number}")
+            return dash.no_update
+
+        fig = go.Figure()
+        x_vals = [data['timeStamp'] for data in filtered_data]
+        y_vals = [int(data['UnitNumber']) for data in filtered_data]
+
+        # 2Dラインチャートを作成
+        fig.add_trace(go.Scatter(x=x_vals, y=y_vals, mode='lines+markers', name=f'Attendance {attendance_number}'))
+
+        # グラフのレイアウトを設定
+        fig.update_layout(
+            title=f'2D Line Plot for Attendance {attendance_number}',
+            xaxis_title='Time',
+            yaxis_title='Unit Number'
+        )
+
+        return fig
+
+    def generate_3d_graph(attendance_numbers, selected_year, selected_month, selected_day, unit_type):
+        # 選択された出席番号のデータを使用して3Dグラフを作成
+        filtered_data = [data for data in all_extracted_data
+                        if data['ID'] in attendance_numbers
+                        and data['Year'] == selected_year
+                        and (not selected_month or data['timeStamp'].month == selected_month)
+                        and (not selected_day or data['timeStamp'].day == selected_day)
+                        and data['UnitType'] == unit_type]
+
+        if not filtered_data:
+            print("No data available for 3D graph.")
+            return dash.no_update
+
+        fig = go.Figure()
+
+        for attendance_number in attendance_numbers:
+            filtered_attendance_data = [data for data in filtered_data if data['ID'] == attendance_number]
+
+            x_vals = [data['ID'] for data in filtered_attendance_data]
+            y_vals = [int(data['UnitNumber']) for data in filtered_attendance_data]
+            z_vals = [data['timeStamp'].timestamp() for data in filtered_attendance_data]
+
+            # 3Dラインチャートを作成
+            fig.add_trace(go.Scatter3d(
                 x=x_vals,
                 y=y_vals,
                 z=z_vals,
                 mode='lines',
-                line=dict(color='blue', width=2)
-            )])
+                line=dict(width=2),
+                name=f'Attendance {attendance_number}'
+            ))
 
-            fig.update_layout(
-                scene=dict(
-                    xaxis_title='ID',
-                    yaxis_title=f'{unit_type} Unit Number',
-                    zaxis_title='Timestamp'
-                ),
-                title=f'3D Line Plot for {unit_type} and Year {selected_year}' if selected_year else f'3D Line Plot of All Data',
-                margin=dict(l=0, r=0, b=0, t=0)
-            )
+        # グラフのレイアウトを設定
+        fig.update_layout(
+            scene=dict(
+                xaxis_title='ID',
+                yaxis_title='Unit Number',
+                zaxis_title='Time',
+            ),
+            title='3D Line Plot for Selected Attendances',
+            margin=dict(l=0, r=0, b=0, t=0)
+        )
 
-            return fig
+        return fig
 
-        except Exception as e:
-            print(f"Error occurred: {e}")
-            return go.Figure()
+
+
 
