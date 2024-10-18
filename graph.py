@@ -332,32 +332,36 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             attendance_number = click_data['points'][0]['label']
             print(f"Selected attendance number from main graph: {attendance_number}")
 
-        # どちらもクリックされていない場合、更新しない
         if not attendance_number:
             return dash.no_update
 
-        # 出席番号が取得できた場合、リストに追加（重複しないように）
+        # 出席番号を追加（重複しないように）
         if attendance_number not in selected_attendance_numbers:
             selected_attendance_numbers.append(attendance_number)
 
-        # デバッグ: フィルタリング条件の確認
-        print(f"Selected year: {selected_year}")
-        print(f"Selected month: {selected_month}")
-        print(f"Selected day: {selected_day}")
-        print(f"Unit type: {unit_type}")
-        print(f"Selected attendance numbers: {selected_attendance_numbers}")
+        # フィルタリング条件を段階的にチェック
+        print(f"Filtering data for Year: {selected_year}, Month: {selected_month}, Day: {selected_day}, UnitType: {unit_type}, Attendance Numbers: {selected_attendance_numbers}")
 
-        # 月、日、ユニットタイプに基づいてデータをフィルタリング
+        # 1. 年でフィルタリング
         filtered_data = [data for data in all_extracted_data
-                        if data['ID'] in selected_attendance_numbers
-                        and data['Year'] == selected_year
-                        and (not selected_month or data['timeStamp'].month == selected_month)
-                        and (not selected_day or data['timeStamp'].day == selected_day)
-                        and data['UnitType'] == unit_type]  # Basic Unit または Main Unit
+                        if data['ID'] in selected_attendance_numbers and data['Year'] == selected_year]
+        print(f"After year filter: {filtered_data}")
 
-        # デバッグ: フィルタリング後のデータ確認
-        print(f"Filtered data: {filtered_data}")
+        # 2. 月でフィルタリング
+        if selected_month:
+            filtered_data = [data for data in filtered_data if data['timeStamp'].month == selected_month]
+            print(f"After month filter: {filtered_data}")
 
+        # 3. 日でフィルタリング
+        if selected_day:
+            filtered_data = [data for data in filtered_data if data['timeStamp'].day == selected_day]
+            print(f"After day filter: {filtered_data}")
+
+        # 4. ユニットタイプでフィルタリング
+        filtered_data = [data for data in filtered_data if data['UnitType'] == unit_type]
+        print(f"After unit type filter: {filtered_data}")
+
+        # データがない場合の処理
         if not filtered_data:
             print("No data available for the selected filters.")
             return dash.no_update
@@ -368,6 +372,7 @@ def register_callbacks(app, calculated_results, all_extracted_data):
 
         # 2人以上選択されている場合は3Dグラフを表示
         return generate_3d_graph(selected_attendance_numbers, selected_year, selected_month, selected_day, unit_type)
+
 
     def generate_2d_graph(attendance_number, selected_year, selected_month, selected_day, unit_type):
         # 選択された出席番号のデータを使用して2Dグラフを作成
