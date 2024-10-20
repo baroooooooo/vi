@@ -6,7 +6,7 @@ import plotly.express as px
 import pandas as pd
 import numpy as np
 import os
-from in_it import parse_objectId
+from in_it import parse_objectId, is_within_academic_year
 from datetime import datetime
 
 
@@ -309,144 +309,129 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         }
     
     @app.callback(
-        Output('3d-graph', 'figure'),  # 3DグラフのID
-        [Input('parameter-graph', 'clickData'),  # メイングラフのクリックイベント
-        Input('reset-button', 'n_clicks'),  # リセットボタンのクリックイベント
-        Input('year-dropdown', 'value'),  # 年選択
-        Input('month-dropdown', 'value'),  # 月選択
-        Input('day-dropdown', 'value'),  # 日選択
-        Input('unit-type-selector', 'value')]  # ユニットタイプの選択 (Basic Unit, Main Unit)
+        Output('3d-graph', 'figure'),
+        [Input('parameter-graph', 'clickData'),
+        Input('reset-button', 'n_clicks'),
+        Input('year-dropdown', 'value'),
+        Input('unit-type-selector', 'value')]
     )
-    def display_2d_or_3d_graph(click_data, reset_n_clicks, selected_year, selected_month, selected_day, unit_type):
+    def display_2d_or_3d_graph(click_data, reset_n_clicks, selected_year, unit_type):
         global selected_attendance_numbers
 
         # リセットボタンが押された場合の処理
         if reset_n_clicks and dash.callback_context.triggered_id == 'reset-button':
             print("Reset button clicked")
-            selected_attendance_numbers = []  # 選択された出席番号をリセット
-            return dash.no_update  # グラフの更新を行わない
-
-        attendance_number = None
-        # メイングラフのクリックデータを取得
-        if click_data and 'points' in click_data:
-            attendance_number = click_data['points'][0]['label']
-            print(f"Selected attendance number from main graph: {attendance_number}")
-
-        if not attendance_number:
+            selected_attendance_numbers = []
             return dash.no_update
 
-        # 出席番号を追加（重複しないように）
+        # クリックデータがある場合、出席番号を取得
+        if click_data and 'points' in click_data:
+            attendance_number = str(click_data['points'][0]['label'])  # 明示的にstrに変換
+            print(f"Selected attendance number from main graph: {attendance_number}")
+        else:
+            return dash.no_update
+
+        # 出席番号をリストに追加（重複しないように）
         if attendance_number not in selected_attendance_numbers:
             selected_attendance_numbers.append(attendance_number)
 
-        # フィルタリング条件を段階的にチェック
-        print(f"Filtering data for Year: {selected_year}, Month: {selected_month}, Day: {selected_day}, UnitType: {unit_type}, Attendance Numbers: {selected_attendance_numbers}")
+        print(f"Filtering data for Year: {selected_year}, UnitType: {unit_type}, Attendance Numbers: {selected_attendance_numbers}")
 
-        # 1. 年でフィルタリング
-        filtered_data = [data for data in all_extracted_data
-                        if data['ID'] in selected_attendance_numbers and data['Year'] == selected_year]
-        print(f"After year filter: {filtered_data}")
-
-        # 2. 月でフィルタリング
-        if selected_month:
-            filtered_data = [data for data in filtered_data if data['timeStamp'].month == selected_month]
-            print(f"After month filter: {filtered_data}")
-
-        # 3. 日でフィルタリング
-        if selected_day:
-            filtered_data = [data for data in filtered_data if data['timeStamp'].day == selected_day]
-            print(f"After day filter: {filtered_data}")
-
-        # 4. ユニットタイプでフィルタリング
-        filtered_data = [data for data in filtered_data if data['UnitType'] == unit_type]
-        print(f"After unit type filter: {filtered_data}")
-
-        # データがない場合の処理
-        if not filtered_data:
-            print("No data available for the selected filters.")
-            return dash.no_update
-
-        # 1人だけ選択されている場合は2Dグラフを表示
+        # 選択された出席番号に基づいて、2Dまたは3Dグラフを生成
         if len(selected_attendance_numbers) == 1:
-            return generate_2d_graph(selected_attendance_numbers[0], selected_year, selected_month, selected_day, unit_type)
+            return generate_graph(selected_attendance_numbers, selected_year, unit_type, graph_type='2D')
+        elif len(selected_attendance_numbers) >= 2:
+            return generate_graph(selected_attendance_numbers, selected_year, unit_type, graph_type='3D')
 
-        # 2人以上選択されている場合は3Dグラフを表示
-        return generate_3d_graph(selected_attendance_numbers, selected_year, selected_month, selected_day, unit_type)
 
-
-    def generate_2d_graph(attendance_number, selected_year, selected_month, selected_day, unit_type):
-        # 選択された出席番号のデータを使用して2Dグラフを作成
+    def filter_data(attendance_numbers, selected_year, unit_type=None):
+        # 年度と出席番号に基づいてフィルタリング
         filtered_data = [data for data in all_extracted_data
-                        if data['ID'] == attendance_number
-                        and data['Year'] == selected_year
-                        and (not selected_month or data['timeStamp'].month == selected_month)
-                        and (not selected_day or data['timeStamp'].day == selected_day)
-                        and data['UnitType'] == unit_type]
+                        if str(data['ID']) in attendance_numbers
+                        and str(data['Year']) == str(selected_year)]
 
+        print(f"Data after year and ID filtering: {len(filtered_data)}")
+
+        # ユニットタイプが指定されている場合のみフィルタリング
+        if unit_type:
+            print(f"Filtering by UnitType: {unit_type}")
+            filtered_data = [data for data in filtered_data if data['UnitType'] == unit_type]
+
+        print(f"Data after UnitType filtering: {len(filtered_data)}")
+
+        # 時系列順にソート（timeStampフィールドを基準に昇順に並べる）
+        filtered_data.sort(key=lambda x: x['timeStamp'])
+
+        return filtered_data
+
+
+    
+
+    def generate_graph(attendance_numbers, selected_year, unit_type=None, graph_type='2D', max_points=1000):
+        # フィルタリングされたデータを取得（時系列順）
+        filtered_data = filter_data(attendance_numbers, selected_year, unit_type)
         if not filtered_data:
-            print(f"No data available for 2D graph for Attendance {attendance_number}")
+            print(f"No data available for {graph_type} graph for Attendance {attendance_numbers}")
             return dash.no_update
 
-        fig = go.Figure()
-        x_vals = [data['timeStamp'] for data in filtered_data]
-        y_vals = [int(data['UnitNumber']) for data in filtered_data]
+        
 
-        # 2Dラインチャートを作成
-        fig.add_trace(go.Scatter(x=x_vals, y=y_vals, mode='lines+markers', name=f'Attendance {attendance_number}'))
-
-        # グラフのレイアウトを設定
-        fig.update_layout(
-            title=f'2D Line Plot for Attendance {attendance_number}',
-            xaxis_title='Time',
-            yaxis_title='Unit Number'
-        )
-
-        return fig
-
-    def generate_3d_graph(attendance_numbers, selected_year, selected_month, selected_day, unit_type):
-        # 選択された出席番号のデータを使用して3Dグラフを作成
-        filtered_data = [data for data in all_extracted_data
-                        if data['ID'] in attendance_numbers
-                        and data['Year'] == selected_year
-                        and (not selected_month or data['timeStamp'].month == selected_month)
-                        and (not selected_day or data['timeStamp'].day == selected_day)
-                        and data['UnitType'] == unit_type]
-
-        if not filtered_data:
-            print("No data available for 3D graph.")
-            return dash.no_update
-
+        print(f"Generating {graph_type} graph with {len(filtered_data)} data points.")
         fig = go.Figure()
 
         for attendance_number in attendance_numbers:
-            filtered_attendance_data = [data for data in filtered_data if data['ID'] == attendance_number]
+            # データをフィルタリング
+            filtered_attendance_data = [data for data in filtered_data if str(data['ID']) == attendance_number]
+            if not filtered_attendance_data:
+                print(f"No data found for attendance {attendance_number}.")
+                continue
 
-            x_vals = [data['ID'] for data in filtered_attendance_data]
-            y_vals = [int(data['UnitNumber']) for data in filtered_attendance_data]
-            z_vals = [data['timeStamp'].timestamp() for data in filtered_attendance_data]
+            # UnitNumberを数値としてソート（可能な場合）
+            filtered_attendance_data.sort(key=lambda x: int(x.get('UnitNumber', '0')) if x.get('UnitNumber', '0').isdigit() else 0)
 
-            # 3Dラインチャートを作成
-            fig.add_trace(go.Scatter3d(
-                x=x_vals,
-                y=y_vals,
-                z=z_vals,
-                mode='lines',
-                line=dict(width=2),
-                name=f'Attendance {attendance_number}'
+            x_vals = [data['timeStamp'] for data in filtered_attendance_data]
+            
+            # objectId が存在するか確認し、なければ UnitNumber を使用
+            y_vals = [data.get('objectId', data.get('UnitNumber', 'Unknown')) for data in filtered_attendance_data]
+
+            print(f"x_vals for attendance {attendance_number}: {x_vals[:5]}")
+            print(f"y_vals for attendance {attendance_number}: {y_vals[:5]}")
+
+            if not x_vals or not y_vals:
+                print("No valid data available for plotting.")
+                return dash.no_update
+
+            # 矢印マーカーを使用
+            fig.add_trace(go.Scatter(
+                x=x_vals, y=y_vals, mode='lines+markers', name=f'Attendance {attendance_number}',
+                line=dict(width=2, color='blue', dash='solid'),  # ラインのスタイル
+                marker=dict(size=10, symbol='arrow-right', angle=45),  # 矢印マーカーを設定
+                text=[f"Step {i+1}" for i in range(len(x_vals))],  # ステップをテキストで表示
+                hoverinfo="text"
             ))
 
-        # グラフのレイアウトを設定
-        fig.update_layout(
-            scene=dict(
-                xaxis_title='ID',
-                yaxis_title='Unit Number',
-                zaxis_title='Time',
-            ),
-            title='3D Line Plot for Selected Attendances',
-            margin=dict(l=0, r=0, b=0, t=0)
-        )
+        # グラフのレイアウト設定
+        configure_graph_layout(fig, f'{graph_type} Line Plot for Attendance {attendance_numbers}', 'Time', 'Activity (Object ID or UnitNumber)', 'Attendance Number' if graph_type == '3D' else None)
 
         return fig
+
+
+    def configure_graph_layout(fig, title, xaxis_title, yaxis_title, zaxis_title=None):
+        print(f"Configuring layout with title: {title}")
+        layout = {
+            'title': title,
+            'xaxis': {'title': xaxis_title},
+            'yaxis': {'title': yaxis_title}
+        }
+        
+        
+
+        fig.update_layout(layout)
+        print(f"Layout configured: {fig.layout}")
+
+
+
+
 
 
 

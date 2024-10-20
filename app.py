@@ -179,16 +179,7 @@ app.layout = html.Div([
         style={'height': '70vh', 'overflowX': 'auto'}
     ),
     html.Div([
-        dcc.Dropdown(
-            id='month-dropdown',
-            options=[{'label': f'{month}月', 'value': month} for month in range(1, 13)],
-            placeholder="月を選択",
-        ),
-        dcc.Dropdown(
-            id='day-dropdown',
-            options=[{'label': f'{day}日', 'value': day} for day in range(1, 32)],
-            placeholder="日にちを選択",
-        ),
+        
         html.Div([  # 3次元グラフのリセットボタン
             html.Button('Reset Graph', id='reset-button', n_clicks=0),
         ], style={'display': 'flex', 'justify-content': 'center', 'padding': '10px'}),

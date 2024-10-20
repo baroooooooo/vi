@@ -3,16 +3,17 @@ import os
 from data_processing import calculate_counts_and_times
 import json
 from datetime import datetime
+import pytz
 
 # スクリプト内で環境変数を設定
 # C:\\Users\\bbaro\\vi\\datas C:\\Users\\bbaro\\vi\\results自宅
 # C:\\Users\\Syachi\\vi\\datas C:\\Users\\Syachi\\vi\\results学校
-os.environ['DATA_DIRECTORY'] = 'C:\\Users\\Syachi\\vi\\datas'
-os.environ['RESULT_DIRECTORY'] = 'C:\\Users\\Syachi\\vi\\results'
+os.environ['DATA_DIRECTORY'] = 'C:\\Users\\bbaro\\vi\\datas'
+os.environ['RESULT_DIRECTORY'] = 'C:\\Users\\bbaro\\vi\\results'
 
 # 環境変数からディレクトリパスを取得し、設定されていない場合はデフォルトパスを使用
-data_directory = os.environ.get('DATA_DIRECTORY', 'C:\\Users\\Syachi\\vi\\datas')
-result_directory = os.environ.get('RESULT_DIRECTORY', 'C:\\Users\\Syachi\\vi\\results')
+data_directory = os.environ.get('DATA_DIRECTORY', 'C:\\Users\\bbaro\\vi\\datas')
+result_directory = os.environ.get('RESULT_DIRECTORY', 'C:\\Users\\bbaro\\vi\\results')
 global all_extracted_data
 def load_data(file_path):
     
@@ -34,7 +35,7 @@ def load_data(file_path):
         return pd.DataFrame()  # エラーが発生した場合は空のDataFrameを返す
 
 def load_data_result():
-    data_result_path = 'C:\\Users\\Syachi\\vi\\results\\data_result.csv'
+    data_result_path = 'C:\\Users\\bbaro\\vi\\results\\data_result.csv'
     try:
         data_result = pd.read_csv(data_result_path)
         print("Loaded result_data:", data_result.head())  # 読み込んだデータを確認
@@ -104,8 +105,7 @@ def prepare_data(data_directory, result_data):
 
                     data_dict[year][attendance_number] = counts_and_times  # 結果を格納
 
-                    print(f'Processed data for {attendance_number} in {year}: {data_dict[year][attendance_number]}')
-                    print(f'Data Dictionary after processing: {data_dict}')  # デバッグ: 最終結果を確認
+                    
 
 
                 else:
@@ -145,45 +145,56 @@ def prepare_and_collect_data(data_directory, result_data):
                     data_dict[year][attendance_number] = counts_and_times
 
                     # フィールドを抽出
-                    extracted_data = extract_id_object_timestamp(data)
+                    extracted_data = extract_id_object_timestamp(data, year)
 
                     # 各データに年と成績を追加
                     for item in extracted_data:
                         item['Year'] = year
                         item['test_result'] = test_result
 
-                    # デバッグ: 抽出したデータを確認
-                    print(f"Extracted and processed data: {extracted_data}")
+                   
 
                     # リストに追加
                     all_extracted_data.extend(extracted_data)
                 else:
                     print(f'No data found for attendance number {attendance_number} in {year}.')
 
-    # デバッグ: 最終的に格納されたデータの内容を確認
-    print(f"All extracted data: {all_extracted_data}")
-
     return data_dict, all_extracted_data
 
 
-def extract_id_object_timestamp(data):
+def extract_id_object_timestamp(data, year):
     extracted_data = []
     
     for index, row in data.iterrows():
         try:
             # 'actor'フィールドを解析して 'openId' を取得
-            actor_json = json.loads(row['actor'])
+            try:
+                actor_json = json.loads(row['actor'])
+                if not isinstance(actor_json, list):
+                    print(f"Unexpected actor format for row {index}: {row['actor']}")
+                    continue
+            except json.JSONDecodeError:
+                print(f"Failed to parse actor JSON for row {index}: {row['actor']}")
+                continue
+
             openId = None
             for actor in actor_json:
                 if 'openId' in actor:
                     openId = actor['openId']
                     break
-            
             if openId is None:
                 openId = 'unknown'
 
             # 'object'フィールドを解析して 'objectId' を取得
-            object_json = json.loads(row['object'])
+            try:
+                object_json = json.loads(row['object'])
+                if not isinstance(object_json, list):
+                    print(f"Unexpected object format for row {index}: {row['object']}")
+                    continue
+            except json.JSONDecodeError:
+                print(f"Failed to parse object JSON for row {index}: {row['object']}")
+                continue
+
             objectId = None
             for obj in object_json:
                 if 'objectId' in obj:
@@ -205,25 +216,24 @@ def extract_id_object_timestamp(data):
             if timeStamp is None:
                 continue
 
-            # 年月日を抽出
+            # 年月日のみを抽出 (年は無視)
             date_only = timeStamp.strftime('%Y-%m-%d')
 
-            # 抽出したデータを追加
+            # 抽出したデータを追加、優先するのは元のYear
             extracted_data.append({
                 'ID': openId,
                 'UnitType': unit_type,
                 'UnitNumber': unit_number,
                 'timeStamp': timeStamp,
-                'date_only': date_only
+                'date_only': date_only,  # 年月日のみ使用、年は含まない
+                'Year': str(year)  # 元のYearを優先
             })
         except Exception as e:
             print(f"行 {index} の処理中にエラーが発生しました: {e}")
             continue
 
-    # デバッグ: 抽出されたデータの構造を確認
-    print(f"Extracted data: {extracted_data}")
-
     return extracted_data
+
 
 
 
@@ -239,22 +249,32 @@ def parse_objectId(objectId):
     """
     try:
         parts = objectId.split('/')  # '/' で分割
-        if len(parts) >= 4:  # パーツが期待される長さか確認
-            if 'MainUnit' in parts[1]:
-                unit_type = 'MainUnit'
-                unit_number = parts[2]  # MainUnitの番号を取得
-            elif 'BasicUnit' in parts[1]:
-                unit_type = 'BasicUnit'
-                unit_number = parts[2]  # BasicUnitの番号を取得
-            else:
-                return None, None  # 他のフォーマットの場合
 
-            return unit_type, unit_number  # Unitタイプと番号を返す
+        # 必要な情報が含まれていない場合、エントリを無視
+        if len(parts) < 3:
+            # 必要な形式（例: 'kototomo/MainUnit/9'）を満たさないものは無視
+            return None, None
+
+        # フォーマットに基づいてユニットタイプと番号を取得
+        if 'MainUnit' in parts[1] or 'BasicUnit' in parts[1]:
+            unit_type = parts[1]
+            unit_number = parts[2] if parts[2].isdigit() else None  # ユニット番号が数値であることを確認
+
+            if unit_number is None:
+                # ユニット番号が不正（数値でない）の場合は無視
+                return None, None
+
+            return unit_type, unit_number
         else:
-            return None, None  # 期待されるフォーマットでない場合
+            # ユニットタイプが不明の場合も無視
+            return None, None
+
     except Exception as e:
-        print(f"Error parsing objectId: {objectId}, Error: {e}")
-        return None, None  # エラーが発生した場合
+        print(f"Error parsing objectId {objectId}: {e}")
+        return None, None
+
+
+
 
 
 
@@ -262,16 +282,32 @@ def parse_timeStamp(timeStamp_str):
     from dateutil import parser
     try:
         return parser.isoparse(timeStamp_str)
-    except Exception as e:
-        print(f"Error parsing timeStamp {timeStamp_str}: {e}")
-        return None
+    except parser.ParserError:
+        try:
+            return pd.to_datetime(timeStamp_str)  # フォールバックの処理
+        except Exception as e:
+            print(f"Error parsing timeStamp {timeStamp_str}: {e}")
+            return None
+        
+
+def is_within_academic_year(timeStamp, academic_year):
+    """
+    学年度内にあるかを確認します。
+    例: 2018年度なら 2018年4月1日 から 2019年3月31日まで
+    """
+    tz = pytz.utc  # タイムゾーンを統一
+    start_date = tz.localize(datetime(int(academic_year), 4, 1))  # 学年度開始日
+    end_date = tz.localize(datetime(int(academic_year) + 1, 3, 31))  # 学年度終了日
+    
+    # timeStampが学年度の範囲内かどうか確認
+    return start_date <= timeStamp <= end_date
 
 
 
 
 if __name__ == "__main__":
-    os.environ['DATA_DIRECTORY'] = 'C:\\Users\\Syachi\\vi\\datas'
-    os.environ['RESULT_DIRECTORY'] = 'C:\\Users\\Syachi\vi\\results'
+    os.environ['DATA_DIRECTORY'] = 'C:\\Users\\bbaro\\vi\\datas'
+    os.environ['RESULT_DIRECTORY'] = 'C:\\Users\\bbaro\vi\\results'
 
     # 環境変数からディレクトリパスを取得し、設定されていない場合はデフォルトパスを使用
     data_directory = os.environ.get('DATA_DIRECTORY', 'C:\\Users\\Syachi\\vi\\datas')
