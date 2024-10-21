@@ -313,16 +313,17 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         [Input('parameter-graph', 'clickData'),
         Input('reset-button', 'n_clicks'),
         Input('year-dropdown', 'value'),
-        Input('unit-type-selector', 'value')]
+        Input('unit-type-selector', 'value')],
+        [State('selected-attendance-numbers', 'data')]
     )
-    def display_2d_or_3d_graph(click_data, reset_n_clicks, selected_year, unit_type):
+    def display_2d_or_3d_graph(click_data, reset_n_clicks, selected_year, unit_type, stored_numbers):
         global selected_attendance_numbers
 
         # リセットボタンが押された場合の処理
         if reset_n_clicks and dash.callback_context.triggered_id == 'reset-button':
-            print("Reset button clicked")
+            print("Reset button clicked, clearing selected attendance numbers")
             selected_attendance_numbers = []
-            return dash.no_update
+            return go.Figure()  # 空のグラフを返す
 
         # クリックデータがある場合、出席番号を取得
         if click_data and 'points' in click_data:
@@ -337,18 +338,15 @@ def register_callbacks(app, calculated_results, all_extracted_data):
 
         print(f"Filtering data for Year: {selected_year}, UnitType: {unit_type}, Attendance Numbers: {selected_attendance_numbers}")
 
-        # 選択された出席番号に基づいて、2Dまたは3Dグラフを生成
-        if len(selected_attendance_numbers) == 1:
-            return generate_graph(selected_attendance_numbers, selected_year, unit_type, graph_type='2D')
-        elif len(selected_attendance_numbers) >= 2:
-            return generate_graph(selected_attendance_numbers, selected_year, unit_type, graph_type='3D')
+        # 選択された出席番号に基づいてグラフを生成
+        return generate_graph_with_review(selected_attendance_numbers, selected_year, unit_type)
 
 
     def filter_data(attendance_numbers, selected_year, unit_type=None):
         # 年度と出席番号に基づいてフィルタリング
         filtered_data = [data for data in all_extracted_data
                         if str(data['ID']) in attendance_numbers
-                        and str(data['Year']) == str(selected_year)]
+                        and is_within_academic_year(data['timeStamp'], selected_year)]  # 学年度でフィルタ
 
         print(f"Data after year and ID filtering: {len(filtered_data)}")
 
@@ -362,73 +360,114 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         # 時系列順にソート（timeStampフィールドを基準に昇順に並べる）
         filtered_data.sort(key=lambda x: x['timeStamp'])
 
+        # direction フィールドを計算して追加
+        directions = calculate_direction(filtered_data)
+
+        for i in range(len(filtered_data)):
+            filtered_data[i]['direction'] = directions[i]
+
         return filtered_data
 
 
-    
+    def calculate_direction(filtered_data):
+        directions = []
+        previous_unit_number = None
 
-    def generate_graph(attendance_numbers, selected_year, unit_type=None, graph_type='2D', max_points=1000):
-        # フィルタリングされたデータを取得（時系列順）
+        for data in filtered_data:
+            current_unit_number = int(data.get('UnitNumber', 0))  # UnitNumber を整数で処理
+            if previous_unit_number is None:
+                directions.append('Forward')  # 最初のエントリは Forward
+            else:
+                if current_unit_number >= previous_unit_number:
+                    directions.append('Forward')
+                else:
+                    directions.append('Review')
+            previous_unit_number = current_unit_number
+
+        return directions
+
+
+    def generate_graph_with_review(attendance_numbers, selected_year, unit_type=None):
+        if not attendance_numbers:
+            print("No attendance numbers selected, returning empty figure.")
+            return go.Figure()  # 空のグラフを返す
+
         filtered_data = filter_data(attendance_numbers, selected_year, unit_type)
         if not filtered_data:
-            print(f"No data available for {graph_type} graph for Attendance {attendance_numbers}")
-            return dash.no_update
+            print(f"No data available for Attendance {attendance_numbers}")
+            return go.Figure()  # データがない場合も空のグラフを返す
 
-        
-
-        print(f"Generating {graph_type} graph with {len(filtered_data)} data points.")
         fig = go.Figure()
 
         for attendance_number in attendance_numbers:
-            # データをフィルタリング
             filtered_attendance_data = [data for data in filtered_data if str(data['ID']) == attendance_number]
             if not filtered_attendance_data:
-                print(f"No data found for attendance {attendance_number}.")
                 continue
 
-            # UnitNumberを数値としてソート（可能な場合）
-            filtered_attendance_data.sort(key=lambda x: int(x.get('UnitNumber', '0')) if x.get('UnitNumber', '0').isdigit() else 0)
-
-            x_vals = [data['timeStamp'] for data in filtered_attendance_data]
+            filtered_attendance_data.sort(key=lambda x: x['timeStamp'])
             
-            # objectId が存在するか確認し、なければ UnitNumber を使用
-            y_vals = [data.get('objectId', data.get('UnitNumber', 'Unknown')) for data in filtered_attendance_data]
+            x_vals = [data['timeStamp'] for data in filtered_attendance_data]
+            y_vals = [int(data.get('UnitNumber', '0')) for data in filtered_attendance_data]
+            directions = [data.get('direction', 'Forward') for data in filtered_attendance_data]
 
-            print(f"x_vals for attendance {attendance_number}: {x_vals[:5]}")
-            print(f"y_vals for attendance {attendance_number}: {y_vals[:5]}")
+            # 全データを1つのセグメントとして扱い、進行方向によって線のスタイルを切り替える
+            for i in range(1, len(x_vals)):
+                if directions[i] == 'Forward':
+                    fig.add_trace(go.Scatter(
+                        x=x_vals[i-1:i+1],
+                        y=y_vals[i-1:i+1],
+                        mode='lines+markers',
+                        name=f'Attendance {attendance_number} - Forward',
+                        line=dict(color='blue', width=2),
+                        marker=dict(symbol='triangle-up', size=8),
+                        showlegend=attendance_number == attendance_numbers[0] and i == 1  # 最初の進行のみ凡例表示
+                    ))
+                else:  # Review
+                    fig.add_trace(go.Scatter(
+                        x=x_vals[i-1:i+1],
+                        y=y_vals[i-1:i+1],
+                        mode='lines+markers',
+                        name=f'Attendance {attendance_number} - Review',
+                        line=dict(color='red', width=2, dash='dash'),
+                        marker=dict(symbol='triangle-down', size=8),
+                        showlegend=attendance_number == attendance_numbers[0] and i == 1  # 最初のレビューのみ凡例表示
+                    ))
 
-            if not x_vals or not y_vals:
-                print("No valid data available for plotting.")
-                return dash.no_update
-
-            # 矢印マーカーを使用
-            fig.add_trace(go.Scatter(
-                x=x_vals, y=y_vals, mode='lines+markers', name=f'Attendance {attendance_number}',
-                line=dict(width=2, color='blue', dash='solid'),  # ラインのスタイル
-                marker=dict(size=10, symbol='arrow-right', angle=45),  # 矢印マーカーを設定
-                text=[f"Step {i+1}" for i in range(len(x_vals))],  # ステップをテキストで表示
-                hoverinfo="text"
-            ))
-
-        # グラフのレイアウト設定
-        configure_graph_layout(fig, f'{graph_type} Line Plot for Attendance {attendance_numbers}', 'Time', 'Activity (Object ID or UnitNumber)', 'Attendance Number' if graph_type == '3D' else None)
+        fig.update_layout(
+            title='Unit Progress with Review',
+            xaxis_title='Time',
+            yaxis_title='Unit Number',
+            xaxis=dict(tickformat='%b %Y'),
+            yaxis=dict(dtick=1),
+            legend=dict(x=1, y=0.5, traceorder='normal', title=''),
+            height=500
+        )
 
         return fig
+
+
+
+
+
 
 
     def configure_graph_layout(fig, title, xaxis_title, yaxis_title, zaxis_title=None):
         print(f"Configuring layout with title: {title}")
         layout = {
             'title': title,
-            'xaxis': {'title': xaxis_title},
-            'yaxis': {'title': yaxis_title}
+            'xaxis': {'title': xaxis_title, 'range': ['2018-01-01', '2018-12-31']},  # 日付範囲を指定
+            'yaxis': {'title': yaxis_title, 'range': [1, 10]}  # y軸の範囲を指定
         }
-        
-        
+
+        if zaxis_title:
+            layout['scene'] = {
+                'xaxis': {'title': xaxis_title},
+                'yaxis': {'title': yaxis_title},
+                'zaxis': {'title': zaxis_title}
+            }
 
         fig.update_layout(layout)
         print(f"Layout configured: {fig.layout}")
-
 
 
 
