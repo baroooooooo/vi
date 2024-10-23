@@ -27,21 +27,22 @@ year_options = [{'label': str(year), 'value': year} for year in years]
 
 # Dashのレイアウト
 app.layout = html.Div([
-    html.H1("KoToToMo Plus Visualizer", style={'text-align': 'center'}),  # タイトル
+    html.H1("KoToToMo Plus Visualizer", style={'text-align': 'center', 'padding-bottom': '20px'}),
 
     html.Div([
+        # 年選択のドロップダウン
         html.Div([
             dcc.Dropdown(
                 id='year-dropdown',
                 options=year_options,  # 年のリスト
                 value=years[0] if years else None,  # デフォルト値の設定
                 placeholder="年を選択してください",
-                style={'width': '100%'}
+                style={'width': '150px'}  # 幅を指定
             ),
-        ], style={'width': '30%', 'display': 'inline-block', 'margin': '0 10px'}),
+        ], style={'margin': '0 10px'}),  # 余白を調整
 
-        html.Button('外れ値の除外ボタン', id='toggle-outliers', n_clicks=0),
 
+        # パラメータ選択のドロップダウン
         html.Div([
             dcc.Dropdown(
                 id='parameter-dropdown',
@@ -63,9 +64,9 @@ app.layout = html.Div([
                 ],
                 value='video_start_count',  # デフォルト値
                 placeholder="パラメータを選択してください",
-                style={'width': '100%'}
+                style={'width': '150px'}  # 幅を指定
             ),
-        ], style={'width': '30%', 'display': 'inline-block', 'margin': '0 10px'}),
+        ], style={'margin': '0 10px'}),
 
         html.Div([
             dcc.Dropdown(
@@ -87,14 +88,15 @@ app.layout = html.Div([
                     {'label': '成績', 'value': 'test_result'}
                 ],
                 value=None,
-                placeholder="パラメータを選択してください",
-                style={'width': '100%'}
+                placeholder="追加パラメータを選択してください",
+                style={'width': '150px'}  # 幅を指定
             ),
-        ], style={'width': '30%', 'display': 'inline-block', 'margin': '0 10px'}),
+        ], style={'margin': '0 10px'}),
 
+        # X軸選択のドロップダウン
         html.Div([
             dcc.Dropdown(
-                id='x-parameter-dropdown',  # X軸用のドロップダウン
+                id='x-parameter-dropdown',
                 options=[
                     {'label': '動画再生回数', 'value': 'video_start_count'},
                     {'label': '音声再生回数', 'value': 'audio_start_count'},
@@ -113,12 +115,14 @@ app.layout = html.Div([
                 ],
                 value=None,  # デフォルト値
                 placeholder="X軸パラメータを選択してください",
+                style={'width': '150px'}  # 幅を指定
             ),
-        ], style={'width': '30%', 'display': 'inline-block', 'margin': '0 10px'}),
+        ], style={'margin': '0 10px'}),
 
+        # Y軸選択のドロップダウン
         html.Div([
             dcc.Dropdown(
-                id='y-parameter-dropdown',  # Y軸用のドロップダウン
+                id='y-parameter-dropdown',
                 options=[
                     {'label': '動画再生回数', 'value': 'video_start_count'},
                     {'label': '音声再生回数', 'value': 'audio_start_count'},
@@ -137,58 +141,53 @@ app.layout = html.Div([
                 ],
                 value=None,  # デフォルト値
                 placeholder="Y軸パラメータを選択してください",
+                style={'width': '150px'}  # 幅を指定
             ),
-        ], style={'width': '30%', 'display': 'inline-block', 'margin': '0 10px'}),
-    ], style={'display': 'flex', 'justify-content': 'center', 'align-items': 'center', 'padding': '10px'}),
+        ], style={'margin': '0 10px'}),
 
-    # ... その他のレイアウトコード ...
+        # 順序ボタン
+        html.Div([
+            html.Button('番号順', id='order-number', n_clicks=0),
+            html.Button('昇順', id='order-asc', n_clicks=0),
+            html.Button('降順', id='order-desc', n_clicks=0)
+        ], style={'margin': '0 10px'}),
 
-    html.Div([
-        html.Button('番号順', id='order-number', n_clicks=0, style={'margin': '0 5px'}),
-        html.Button('昇順', id='order-asc', n_clicks=0, style={'margin': '0 5px'}),
-        html.Button('降順', id='order-desc', n_clicks=0, style={'margin': '0 5px'}),
-    ], style={'display': 'flex', 'justify-content': 'center', 'padding': '10px'}),
+    ], style={'display': 'flex', 'flex-wrap': 'wrap', 'justify-content': 'center', 'align-items': 'center', 'gap': '10px', 'padding': '10px'}),  # レイアウトを一列に並べるためのスタイル
 
-    html.Div([  # レーダーチャートのリセットボタン
-        html.Button('Reset Radar Chart', id='reset-radar-button', n_clicks=0),
-    ], style={'display': 'flex', 'justify-content': 'center', 'padding': '10px'}),
     dcc.RadioItems(
         id='unit-type-selector',
         options=[
             {'label': 'Main Unit', 'value': 'MainUnit'},
             {'label': 'Basic Unit', 'value': 'BasicUnit'}
         ],
-        value='MainUnit',  # デフォルトでは 'MainUnit' が選択される
-        labelStyle={'display': 'inline-block'}
-    ),
-
-    dcc.Graph(
-        id='parameter-graph',
-        figure={
-            'data': [],
-            'layout': {'title': 'グラフがありません'}
-        },
-        config={'displayModeBar': True, 'displaylogo': False},
-        style={'cursor': 'pointer'}
-    ),
-
-    dcc.Graph(id='popup-graph', style={'height': '80vh', 'width': '100%'}),  # ポップアップグラフも大きく
-
-    dcc.Graph(
-        id='radar-chart',
-        style={'height': '70vh', 'overflowX': 'auto'}
+        value='MainUnit',
+        labelStyle={'display': 'inline-block', 'margin-right': '20px'}
     ),
     html.Div([
-        
-        html.Div([  # 3次元グラフのリセットボタン
-            html.Button('Reset Graph', id='reset-button', n_clicks=0),
-        ], style={'display': 'flex', 'justify-content': 'center', 'padding': '10px'}),
-        dcc.Graph(id='3d-graph'),
-    ]),
+        dcc.Graph(
+            id='parameter-graph',
+            figure={'data': [], 'layout': {'title': 'グラフがありません'}},
+            config={'displayModeBar': True, 'displaylogo': False},
+            style={'cursor': 'pointer', 'height': '50vh', 'width': '100%', 'margin-bottom': '10px'}
+        ),
+
+        dcc.Graph(id='popup-graph', style={'height': '60vh', 'width': '100%', 'margin-top': '10px'}),  # コンパクトに高さ調整
+    ], style={'padding': '0', 'margin': '0', 'display': 'flex', 'flex-direction': 'column', 'align-items': 'center'}),
+
+    html.Button('Reset Radar Chart', id='reset-radar-button', n_clicks=0),
+    dcc.Graph(id='radar-chart', style={'height': '60vh'}),
+
+    html.Div([
+        html.Button('Reset Graph', id='reset-button', n_clicks=0, style={'margin-top': '10px'}),
+    ], style={'text-align': 'center'}),
+
+    dcc.Graph(id='3d-graph', style={'height': '50vh'}),
 
     dcc.Store(id='graph-data', data=[]),
     dcc.Store(id='selected-attendance-numbers', data=[]),
+    html.Button('外れ値の除外ボタン', id='toggle-outliers', n_clicks=0)
 ])
+
 
 
 # コールバックの設定

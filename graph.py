@@ -6,7 +6,7 @@ import plotly.express as px
 import pandas as pd
 import numpy as np
 import os
-from in_it import parse_objectId, is_within_academic_year
+from in_it import parse_objectId, is_within_academic_year, save_random_data_to_csv
 from datetime import datetime
 
 
@@ -36,8 +36,9 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             return {'data': [], 'layout': {}}, None
 
         year_data = calculated_results.get(selected_year, {})
+
+        save_random_data_to_csv(calculated_results, num_students=5, file_name="random_students_data.csv")
         
-        # 出席番号ごとにメインとサブのパラメータを取得
         attendance_data = [
             (attendance_number, year_data[attendance_number].get(selected_parameter, 0),
             year_data[attendance_number].get(selected_extra_parameter, 0))
@@ -45,86 +46,58 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             if selected_parameter in year_data[attendance_number] and year_data[attendance_number].get(selected_extra_parameter) is not None
         ]
 
-        # ソート条件に基づいて出席番号ごとに並び替え
         triggered_id = dash.callback_context.triggered_id
         if triggered_id == 'order-asc':
-            attendance_data.sort(key=lambda x: x[1])  # メインパラメータで昇順ソート
+            attendance_data.sort(key=lambda x: x[1])
         elif triggered_id == 'order-desc':
-            attendance_data.sort(key=lambda x: x[1], reverse=True)  # メインパラメータで降順ソート
+            attendance_data.sort(key=lambda x: x[1], reverse=True)
         elif triggered_id == 'order-number':
-            attendance_data.sort(key=lambda x: int(x[0]))  # 出席番号でソート
+            attendance_data.sort(key=lambda x: int(x[0]))
 
         attendance_numbers = [x[0] for x in attendance_data]
         y_values_original = [x[1] for x in attendance_data]
         y_values_extra = [x[2] for x in attendance_data]
 
-        if not attendance_numbers:  # データが存在しない場合
+        if not attendance_numbers:
             return {'data': [], 'layout': {'title': 'No data available'}}, None
-        
-        # 外れ値の検出と切り替え
+
         use_outliers = toggle_outliers % 2 == 1 if toggle_outliers else False
 
-        # メインパラメータの外れ値処理
         if use_outliers:
             processed_y_values_original = detect_outliers(y_values_original)
         else:
             processed_y_values_original = y_values_original
 
-        # 最大値を取得し、正規化
         max_original_value = max(processed_y_values_original) if processed_y_values_original else 1
         normalized_y_values_original = [value / max_original_value for value in processed_y_values_original]
 
-        # サブパラメータの外れ値処理
         if use_outliers:
             processed_y_values_extra = detect_outliers(y_values_extra)
         else:
             processed_y_values_extra = y_values_extra
 
-        # 最大値を取得し、正規化
         max_extra_value = max(processed_y_values_extra) if processed_y_values_extra else 1
         normalized_y_values_extra = [value / max_extra_value for value in processed_y_values_extra]
 
-
-        # メインパラメータの棒グラフトレース（外れ値は透過）
         original_data = go.Bar(
             x=attendance_numbers,
-            y=normalized_y_values_original,  # 正規化された値を表示
+            y=normalized_y_values_original,
             text=[f"ID: {num}, {selected_parameter}: {normalized_y_values_original[i]:.2f}" for i, num in enumerate(attendance_numbers)],
             textposition='outside',
-            marker={
-                'color': [
-                    'rgba(255, 99, 71, 0.6)' if value in processed_y_values_original and value == 0 else 'rgba(255, 99, 71, 1)' 
-                    for value in y_values_original
-                ]
-            },
+            marker={'color': 'rgba(255, 99, 71, 1)'},
             name=f'{selected_parameter} (Main)',
             width=0.4,
-            hovertemplate=[
-                f'Attendance Number: {attendance_numbers[i]}<br>{selected_parameter}: {normalized_y_values_original[i]:.2f}<br>Original Value: {y_values_original[i]}<extra></extra>' 
-                for i in range(len(attendance_numbers))
-            ]
+            hovertemplate=[f'Attendance Number: {attendance_numbers[i]}<br>{selected_parameter}: {normalized_y_values_original[i]:.2f}<br>Original Value: {y_values_original[i]}<extra></extra>' for i in range(len(attendance_numbers))]
         )
 
-
-        # サブパラメータの棒グラフトレース（外れ値は透過）
         extra_data_trace = go.Bar(
             x=attendance_numbers,
-            y=normalized_y_values_extra,  # 正規化された値を表示
-            marker={
-                'color': [
-                    'rgba(100, 150, 255, 0.6)' if value in processed_y_values_extra and value == 0 else 'rgba(100, 150, 255, 1)' 
-                    for value in y_values_extra
-                ]
-            },
+            y=normalized_y_values_extra,
+            marker={'color': 'rgba(100, 150, 255, 1)'},
             name=f'{selected_extra_parameter} (Extra)',
             width=0.4,
-            hovertemplate=[
-                f'Attendance Number: {attendance_numbers[i]}<br>{selected_extra_parameter}: {normalized_y_values_extra[i]:.2f}<br>Original Value: {y_values_extra[i]}<extra></extra>' 
-                for i in range(len(attendance_numbers))
-            ]
+            hovertemplate=[f'Attendance Number: {attendance_numbers[i]}<br>{selected_extra_parameter}: {normalized_y_values_extra[i]:.2f}<br>Original Value: {y_values_extra[i]}<extra></extra>' for i in range(len(attendance_numbers))]
         )
-
-
 
         data = [original_data, extra_data_trace]
 
@@ -137,6 +110,7 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             'bargap': 0.1,
             'bargroupgap': 0.1,
             'autosize': True,
+            'height': 400  # グラフの高さを小さく調整
         }
 
         return {'data': data, 'layout': layout}, None
@@ -154,49 +128,50 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         if x_param and y_param and selected_year:
             year_data = calculated_results.get(selected_year, {})
 
+            # 出席番号とパラメータのリストを作成
             attendance_data_popup = [
                 (attendance_number,
-                year_data[attendance_number].get(x_param, 0),
+                year_data[attendance_number].get(x_param, 0), 
                 year_data[attendance_number].get(y_param, 0))
                 for attendance_number in year_data
-                if year_data[attendance_number].get(x_param) is not None and \
-                year_data[attendance_number].get(y_param) is not None
+                if year_data[attendance_number].get(x_param) is not None and year_data[attendance_number].get(y_param) is not None
             ]
 
-            # データフレームを生成
             if attendance_data_popup:
-                filtered_df = pd.DataFrame(attendance_data_popup, columns=['attendance_number', x_param, y_param])
+                # 1次元データとして列ごとに分ける
+                attendance_numbers, x_values, y_values = zip(*attendance_data_popup)
+                
+                # DataFrameに変換
+                filtered_df = pd.DataFrame({
+                    'attendance_number': attendance_numbers,
+                    x_param: x_values,
+                    y_param: y_values
+                })
 
-                # 外れ値の検出と除外
+                # 外れ値の処理
                 use_outliers = toggle_outliers % 2 == 1 if toggle_outliers else False
                 if use_outliers:
-                    # 外れ値を0に設定
                     filtered_df[x_param] = detect_outliers(filtered_df[x_param])
                     filtered_df[y_param] = detect_outliers(filtered_df[y_param])
-                else:
-                    filtered_df[x_param] = filtered_df[x_param]
-                    filtered_df[y_param] = filtered_df[y_param]
 
-                # グラフ生成
+                # 散布図の作成
                 parameter_fig = px.scatter(
                     filtered_df,
                     x=x_param,
                     y=y_param,
                     title=f"X軸 {x_param} Y軸 {y_param} の散布図",
-                    text='attendance_number'  # IDを表示
+                    text='attendance_number'
                 )
 
-                # IDの位置を下に設定
-                parameter_fig.update_traces(textposition='bottom center')
+                # ID番号のフォントサイズを小さく設定
+                parameter_fig.update_traces(textposition='bottom center', textfont_size=10)
 
-                print("Parameter graph displayed")
                 return parameter_fig
             else:
-                print("No valid attendance data found for parameter graph")
                 return {}  # データが無い場合の処理
         else:
-            print("Please select both parameters and a year")
             return {}
+
 
 
 
@@ -298,13 +273,9 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             'data': radar_traces,
             'layout': go.Layout(
                 title='レーダーチャート',
-                polar={
-                    'radialaxis': {
-                        'visible': True,
-                        'range': [0, 1],  # レーダーチャートの範囲を0~1に設定
-                    }
-                },
-                showlegend=True
+                polar={'radialaxis': {'visible': True, 'range': [0, 1]}},
+                showlegend=True,
+                height=400  # レーダーチャートの高さを調整
             )
         }
     
@@ -440,7 +411,7 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             xaxis=dict(tickformat='%b %Y'),
             yaxis=dict(dtick=1),
             legend=dict(x=1, y=0.5, traceorder='normal', title=''),
-            height=500
+            height=400  # 3Dグラフの高さを調整
         )
 
         return fig

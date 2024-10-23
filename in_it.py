@@ -4,6 +4,8 @@ from data_processing import calculate_counts_and_times
 import json
 from datetime import datetime
 import pytz
+import random
+import csv
 
 # スクリプト内で環境変数を設定
 # C:\\Users\\bbaro\\vi\\datas C:\\Users\\bbaro\\vi\\results自宅
@@ -20,9 +22,7 @@ def load_data(file_path):
     print(f'Loading data from: {file_path}')  # デバッグ用
     try:
         data = pd.read_csv(file_path)
-        print("Loaded Data:")  # デバッグ: 読み込んだデータの表示
-        print(data.head())  
-        print(data.dtypes)  # デバッグ: データ型を表示
+        
         return data
     except pd.errors.EmptyDataError:
         print(f"No data found in file: {file_path}")
@@ -305,6 +305,40 @@ def is_within_academic_year(timeStamp, academic_year):
 
 
 
+def save_random_data_to_csv(data_dict, num_students=5, file_name="random_students_data.csv"):
+    # データをフラットなリストに変換
+    flat_data = []
+    for year, students in data_dict.items():
+        for student_id, data in students.items():
+            flat_data.append({
+                '学生ID': student_id,
+                '総学習時間(s)': data.get('total_answer_time', 0),
+                '動画再生時間(s)': data.get('video_time', 0),
+                '問題への回答数': data.get('answer_count', 0),
+                '成績': data.get('test_result', 0),
+                '録音回数': data.get('recorder_start_count', 0)
+            })
+    
+    print(f"データ数: {len(flat_data)}")  # デバッグ用メッセージ
+
+    # ランダムに5人分のデータを抽出
+    random_data = random.sample(flat_data, min(num_students, len(flat_data)))
+    print(f"ランダム抽出データ: {random_data}")  # デバッグ用メッセージ
+    
+    # CSVに保存
+    headers = ['学生ID', '総学習時間(s)', '動画再生時間(s)', '問題への回答数', '成績', '録音回数']
+    
+    with open(file_name, mode='w', newline='', encoding='utf-8') as file:
+        writer = csv.DictWriter(file, fieldnames=headers)
+        writer.writeheader()
+        writer.writerows(random_data)
+    
+    print(f"{num_students}人分のデータを {file_name} に保存しました。")
+
+
+
+
+
 if __name__ == "__main__":
     os.environ['DATA_DIRECTORY'] = 'C:\\Users\\Syachi\\vi\\datas'
     os.environ['RESULT_DIRECTORY'] = 'C:\\Users\\Syachi\vi\\results'
@@ -319,6 +353,9 @@ if __name__ == "__main__":
 
     # データの準備
     calculated_results, all_extracted_data = prepare_and_collect_data(data_directory, result_data)
-  # result_dataを渡す
+    # result_dataを渡す
+   
+    
+
     print("Calculation complete. Results:")  # デバッグ: 処理結果の表示
     print(calculated_results)
