@@ -79,13 +79,34 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         max_extra_value = max(processed_y_values_extra) if processed_y_values_extra else 1
         normalized_y_values_extra = [value / max_extra_value for value in processed_y_values_extra]
 
+        parameter_labels = {
+            'video_start_count': '動画再生回数',
+            'audio_start_count': '音声再生回数',
+            'answer_count': '回答回数',
+            'total_answer_time': '回答時間',
+            'correct_answers': '正解数',
+            'incorrect_answers': '不正解数',
+            'suspended_count': '中断回数',
+            'launched_count': 'アプリ起動回数',
+            'recording_time': '録音時間',
+            'video_time': '動画再生時間',
+            'recorder_start_count': '録音回数',
+            'movie_completed_count': '動画再生完了回数',
+            'continue_count': '復習回数',
+            'test_result': '成績'
+        }
+        # 日本語ラベルを使用してタイトルと凡例を設定
+        selected_param_label = parameter_labels.get(selected_parameter, selected_parameter)
+        extra_param_label = parameter_labels.get(selected_extra_parameter, selected_extra_parameter)
+
+
         original_data = go.Bar(
             x=attendance_numbers,
             y=normalized_y_values_original,
-            text=[f"ID: {num}, {selected_parameter}: {normalized_y_values_original[i]:.2f}" for i, num in enumerate(attendance_numbers)],
+            text=attendance_numbers,
             textposition='outside',
             marker={'color': 'rgba(255, 99, 71, 1)'},
-            name=f'{selected_parameter} (Main)',
+            name=f'{selected_param_label} (メイン)',
             width=0.4,
             hovertemplate=[f'Attendance Number: {attendance_numbers[i]}<br>{selected_parameter}: {normalized_y_values_original[i]:.2f}<br>Original Value: {y_values_original[i]}<extra></extra>' for i in range(len(attendance_numbers))]
         )
@@ -94,7 +115,7 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             x=attendance_numbers,
             y=normalized_y_values_extra,
             marker={'color': 'rgba(100, 150, 255, 1)'},
-            name=f'{selected_extra_parameter} (Extra)',
+            name=f'{extra_param_label} (サブ)',  # サブパラメータも日本語化
             width=0.4,
             hovertemplate=[f'Attendance Number: {attendance_numbers[i]}<br>{selected_extra_parameter}: {normalized_y_values_extra[i]:.2f}<br>Original Value: {y_values_extra[i]}<extra></extra>' for i in range(len(attendance_numbers))]
         )
@@ -102,7 +123,7 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         data = [original_data, extra_data_trace]
 
         layout = {
-            'title': f'{selected_parameter} and {selected_extra_parameter} for {selected_year}',
+            'title': f'{selected_param_label} と {extra_param_label}  ({selected_year})',
             'xaxis': {'title': '出席番号', 'type': 'category'},
             'yaxis': {'title': 'Normalized Values'},
             'barmode': 'group',
@@ -155,12 +176,40 @@ def register_callbacks(app, calculated_results, all_extracted_data):
                     filtered_df[y_param] = detect_outliers(filtered_df[y_param])
 
                 # 散布図の作成
+                # パラメータ名の日本語ラベルを定義
+                parameter_labels = {
+                    'video_start_count': '動画再生回数',
+                    'audio_start_count': '音声再生回数',
+                    'answer_count': '回答回数',
+                    'total_answer_time': '回答時間',
+                    'correct_answers': '正解数',
+                    'incorrect_answers': '不正解数',
+                    'suspended_count': '中断回数',
+                    'launched_count': 'アプリ起動回数',
+                    'recording_time': '録音時間',
+                    'video_time': '動画再生時間',
+                    'recorder_start_count': '録音回数',
+                    'movie_completed_count': '動画再生完了回数',
+                    'continue_count': '復習回数',
+                    'test_result': '成績'
+                }
+
+                # 日本語ラベルを使用して散布図を作成
+                x_label = parameter_labels.get(x_param, x_param)  # x_param に対応する日本語ラベルを取得
+                y_label = parameter_labels.get(y_param, y_param)  # y_param に対応する日本語ラベルを取得
+
                 parameter_fig = px.scatter(
                     filtered_df,
                     x=x_param,
                     y=y_param,
-                    title=f"X軸 {x_param} Y軸 {y_param} の散布図",
+                    title=f"X軸 {x_label} Y軸 {y_label} の散布図",  # タイトルも日本語化
                     text='attendance_number'
+                )
+
+                # 軸のラベルを設定
+                parameter_fig.update_layout(
+                    xaxis_title=x_label,  # X軸のラベル
+                    yaxis_title=y_label   # Y軸のラベル
                 )
 
                 # ID番号のフォントサイズを小さく設定
@@ -260,12 +309,12 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             radar_traces.append(go.Scatterpolar(
                 r=normalized_values + [normalized_values[0]],  # 閉じた図形にするために最初の値を追加
                 theta=[
-                    'video_start_count', 'audio_start_count', 'answer_count', 'correct_answers',
-                    'incorrect_answers', 'suspended_count', 'launched_count', 'total_answer_time',
-                    'recording_time', 'video_time', 'recorder_start_count', 'movie_completed_count',
-                    'continue_count', 'test_result', 'video_start_count'
+                    '動画再生回数', '音声再生回数', '回答回数', '正解数',
+                    '不正解数', '中断回数', 'アプリ起動回数', '回答時間',
+                    '録音時間', '動画再生時間', '録音回数', '動画再生完了回数',
+                    '復習回数', '成績', '動画再生回数'  # 最初と同じラベルで閉じる
                 ],
-                name=f'Attendance {attendance_number}',
+                name=f'ID{attendance_number}の個人データ',
                 fill='toself'
             ))
 
@@ -273,11 +322,16 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             'data': radar_traces,
             'layout': go.Layout(
                 title='レーダーチャート',
-                polar={'radialaxis': {'visible': True, 'range': [0, 1]}},
+                polar={
+                    'radialaxis': {'visible': True, 'range': [0, 1]},
+                },
                 showlegend=True,
-                height=400  # レーダーチャートの高さを調整
+                legend={'x': 0.9, 'y': 1, 'xanchor': 'right'},  # レジェンドを右上に移動
+                autosize=True,  # レイアウトサイズを自動調整
+                margin={'l': 50, 'r': 50, 'b': 50, 't': 50},  # 左右の余白を均等に
+                height=500
             )
-        }
+            }
     
     @app.callback(
         Output('3d-graph', 'figure'),
@@ -388,7 +442,7 @@ def register_callbacks(app, calculated_results, all_extracted_data):
                         x=x_vals[i-1:i+1],
                         y=y_vals[i-1:i+1],
                         mode='lines+markers',
-                        name=f'Attendance {attendance_number} - Forward',
+                        name='時系列データ',
                         line=dict(color='blue', width=2),
                         marker=dict(symbol='triangle-up', size=8),
                         showlegend=attendance_number == attendance_numbers[0] and i == 1  # 最初の進行のみ凡例表示
@@ -405,7 +459,7 @@ def register_callbacks(app, calculated_results, all_extracted_data):
                     ))
 
         fig.update_layout(
-            title='Unit Progress with Review',
+            title=f'ID {attendance_numbers} の時系列データ',
             xaxis_title='Time',
             yaxis_title='Unit Number',
             xaxis=dict(tickformat='%b %Y'),

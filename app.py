@@ -27,7 +27,7 @@ year_options = [{'label': str(year), 'value': year} for year in years]
 
 # Dashのレイアウト
 app.layout = html.Div([
-    html.H1("KoToToMo Plus Visualizer", style={'text-align': 'center', 'padding-bottom': '20px'}),
+    html.H2("KoToToMo Plus Visualizer", style={'text-align': 'center', 'padding-bottom': '20px'}),
 
     html.Div([
         # 年選択のドロップダウン
@@ -168,21 +168,46 @@ app.layout = html.Div([
             id='parameter-graph',
             figure={'data': [], 'layout': {'title': 'グラフがありません'}},
             config={'displayModeBar': True, 'displaylogo': False},
-            style={'cursor': 'pointer', 'height': '50vh', 'width': '100%', 'margin-bottom': '10px'}
+            style={'cursor': 'pointer', 'height': '340px', 'width': '100%', 'margin-bottom': '40px'}
         ),
 
-        dcc.Graph(id='popup-graph', style={'height': '60vh', 'width': '100%', 'margin-top': '10px'}),  # コンパクトに高さ調整
+        dcc.Graph(id='popup-graph', style={'height': '45vh', 'width': '100%', 'margin-top': '40px'}),  # コンパクトに高さ調整
     ], style={'padding': '0', 'margin': '0', 'display': 'flex', 'flex-direction': 'column', 'align-items': 'center'}),
 
-    html.Button('Reset Radar Chart', id='reset-radar-button', n_clicks=0),
-    dcc.Graph(id='radar-chart', style={'height': '60vh'}),
-
+    
     html.Div([
-        html.Button('Reset Graph', id='reset-button', n_clicks=0, style={'margin-top': '10px'}),
-    ], style={'text-align': 'center'}),
-
-    dcc.Graph(id='3d-graph', style={'height': '50vh'}),
-
+        html.Button('Reset Radar Chart', id='reset-radar-button', n_clicks=0, style={'margin-bottom': '1px'}),  # ボタンの余白をさらに小さく
+        dcc.Graph(
+            id='radar-chart',
+            style={'height': '50vh', 'width': '95%', 'margin-bottom': '0px', 'display': 'flex', 'justify-content': 'center', 'align-items': 'center'},
+            config={'displayModeBar': False},
+            figure={
+                'layout': {
+                    'margin': {'l': 0, 'r': 0, 'b': 0, 't': 50},  # marginを最小化
+                    'height': 600,
+                    'autosize': False,
+                    'polar': {
+                        'radialaxis': {'visible': True, 'range': [0, 1]},
+                        'domain': {'x': [0.1, 0.9], 'y': [0.1, 0.9]}  # グラフの領域を中央に調整
+                    }
+                }
+            }
+        ),
+        html.Button('Reset Graph', id='reset-button', n_clicks=0, style={'margin-top': '1px', 'margin-bottom': '1px'}),  # ボタンの余白を小さく
+        dcc.Graph(
+            id='3d-graph',
+            style={'height': '70vh', 'width': '95%', 'margin-top': '0px'},
+            config={'displayModeBar': False},
+            figure={
+                'layout': {
+                    'margin': {
+                        'l': 0, 'r': 0, 'b': 0, 't': 0
+                    },
+                    'autosize': True
+                }
+            }
+        ),
+    ], style={'padding': '0', 'margin': '0', 'display': 'flex', 'flex-direction': 'column', 'align-items': 'center'}),
     dcc.Store(id='graph-data', data=[]),
     dcc.Store(id='selected-attendance-numbers', data=[]),
     html.Button('外れ値の除外ボタン', id='toggle-outliers', n_clicks=0)
