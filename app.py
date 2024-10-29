@@ -37,7 +37,15 @@ app.layout = html.Div([
                 options=year_options,  # 年のリスト
                 value=years[0] if years else None,  # デフォルト値の設定
                 placeholder="年を選択してください",
-                style={'width': '150px'}  # 幅を指定
+                style={
+                    'width': '200px',
+                    'font-size': '24px',
+                    'text-align': 'center',
+                    'display': 'inline-block',
+                    'vertical-align': 'middle',
+                    'border': '2px solid black',  # 枠線を太く、濃く設定
+                    'border-radius': '5px'  # 角を少し丸める（オプション）
+                }
             ),
         ], style={'margin': '0 10px'}),  # 余白を調整
 
@@ -64,7 +72,15 @@ app.layout = html.Div([
                 ],
                 value='video_start_count',  # デフォルト値
                 placeholder="パラメータを選択してください",
-                style={'width': '150px'}  # 幅を指定
+                style={
+                    'width': '200px',
+                    'font-size': '24px',
+                    'text-align': 'center',
+                    'display': 'inline-block',
+                    'vertical-align': 'middle',
+                    'border': '2px solid black',  # 枠線を太く、濃く設定
+                    'border-radius': '5px'  # 角を少し丸める（オプション）
+                }
             ),
         ], style={'margin': '0 10px'}),
 
@@ -89,7 +105,15 @@ app.layout = html.Div([
                 ],
                 value=None,
                 placeholder="追加パラメータを選択してください",
-                style={'width': '150px'}  # 幅を指定
+                style={
+                    'width': '200px',
+                    'font-size': '24px',
+                    'text-align': 'center',
+                    'display': 'inline-block',
+                    'vertical-align': 'middle',
+                    'border': '2px solid black',  # 枠線を太く、濃く設定
+                    'border-radius': '5px'  # 角を少し丸める（オプション）
+                }
             ),
         ], style={'margin': '0 10px'}),
 
@@ -115,7 +139,15 @@ app.layout = html.Div([
                 ],
                 value=None,  # デフォルト値
                 placeholder="X軸パラメータを選択してください",
-                style={'width': '150px'}  # 幅を指定
+                style={
+                    'width': '200px',
+                    'font-size': '24px',
+                    'text-align': 'center',
+                    'display': 'inline-block',
+                    'vertical-align': 'middle',
+                    'border': '2px solid black',  # 枠線を太く、濃く設定
+                    'border-radius': '5px'  # 角を少し丸める（オプション）
+                }
             ),
         ], style={'margin': '0 10px'}),
 
@@ -141,7 +173,15 @@ app.layout = html.Div([
                 ],
                 value=None,  # デフォルト値
                 placeholder="Y軸パラメータを選択してください",
-                style={'width': '150px'}  # 幅を指定
+                style={
+                    'width': '200px',
+                    'font-size': '24px',
+                    'text-align': 'center',
+                    'display': 'inline-block',
+                    'vertical-align': 'middle',
+                    'border': '2px solid black',  # 枠線を太く、濃く設定
+                    'border-radius': '5px'  # 角を少し丸める（オプション）
+                }
             ),
         ], style={'margin': '0 10px'}),
 

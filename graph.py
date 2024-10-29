@@ -123,9 +123,9 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         data = [original_data, extra_data_trace]
 
         layout = {
-            'title': f'{selected_param_label} と {extra_param_label}  ({selected_year})',
-            'xaxis': {'title': '出席番号', 'type': 'category'},
-            'yaxis': {'title': 'Normalized Values'},
+            'title': f'{selected_param_label} と {extra_param_label}  ({selected_year})', 'font': {'size': 24},
+            'xaxis': {'title': '出席番号', 'type': 'category', 'font': {'size': 18},'tickfont': {'size': 10}},  # X軸ラベルのフォントサイズを小さく設定 ,
+            'yaxis': {'title': 'Normalized Values', 'font': {'size': 18}, 'tickfont': {'size': 10}},
             'barmode': 'group',
             'plot_bgcolor': 'rgba(240, 240, 240, 0.95)',
             'bargap': 0.1,
@@ -208,8 +208,9 @@ def register_callbacks(app, calculated_results, all_extracted_data):
 
                 # 軸のラベルを設定
                 parameter_fig.update_layout(
-                    xaxis_title=x_label,  # X軸のラベル
-                    yaxis_title=y_label   # Y軸のラベル
+                    title={'text': f"X軸 {x_label} Y軸 {y_label} の散布図", 'font': {'size': 28}},  # タイトルのフォントサイズ
+                    xaxis_title={'text': f"X軸 {x_label}", 'font': {'size': 28}},  # X軸タイトルのフォントサイズ
+                    yaxis_title={'text': f"Y軸 {y_label}", 'font': {'size': 28}}   # Y軸タイトルのフォントサイズ
                 )
 
                 # ID番号のフォントサイズを小さく設定
@@ -323,12 +324,18 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             'layout': go.Layout(
                 title='レーダーチャート',
                 polar={
-                    'radialaxis': {'visible': True, 'range': [0, 1]},
+                    'radialaxis': {'visible': True, 'range': [0, 1], 'tickfont': {'size': 14}},  # 軸のラベルフォントサイズを調整
+                    'angularaxis': {'tickfont': {'size': 24}}  # 各パラメータ（角度方向）のフォントサイズを調整
                 },
                 showlegend=True,
-                legend={'x': 0.9, 'y': 1, 'xanchor': 'right'},  # レジェンドを右上に移動
+                legend={
+                    'x': 0.65,  # レーダーチャートに寄せるためにx位置を調整
+                    'y': 1,  # y位置を調整
+                    'xanchor': 'left',  # レジェンドの位置を左揃え
+                    'font': {'size': 22}  # レジェンドのフォントサイズを大きく
+                },  # レジェンドを右上に移動
                 autosize=True,  # レイアウトサイズを自動調整
-                margin={'l': 50, 'r': 50, 'b': 50, 't': 50},  # 左右の余白を均等に
+                margin={'l': 50, 'r': 50, 'b': 50, 't': 75},  # 左右の余白を均等に
                 height=500
             )
             }
@@ -442,7 +449,6 @@ def register_callbacks(app, calculated_results, all_extracted_data):
                         x=x_vals[i-1:i+1],
                         y=y_vals[i-1:i+1],
                         mode='lines+markers',
-                        name='時系列データ',
                         line=dict(color='blue', width=2),
                         marker=dict(symbol='triangle-up', size=8),
                         showlegend=attendance_number == attendance_numbers[0] and i == 1  # 最初の進行のみ凡例表示
@@ -459,12 +465,26 @@ def register_callbacks(app, calculated_results, all_extracted_data):
                     ))
 
         fig.update_layout(
-            title=f'ID {attendance_numbers} の時系列データ',
-            xaxis_title='Time',
-            yaxis_title='Unit Number',
-            xaxis=dict(tickformat='%b %Y'),
-            yaxis=dict(dtick=1),
-            legend=dict(x=1, y=0.5, traceorder='normal', title=''),
+            title={
+                'text': f'ID {attendance_numbers} の時系列データ',
+                'font': {'size': 35}  # フォントサイズを24に設定
+            },
+            xaxis_title={
+                'text': '日付',
+                'font': {'size': 35}  # フォントサイズを24に設定
+            },
+            yaxis_title={
+                'text': 'Unit番号',
+                'font': {'size': 35}  # フォントサイズを24に設定
+            },
+            xaxis=dict(
+                tickformat='%b %Y',
+                tickfont={'size': 20}  # X軸ラベルのフォントサイズ
+            ),
+            yaxis=dict(
+                dtick=1,
+                tickfont={'size': 20}  # Y軸ラベルのフォントサイズ
+            ),
             height=400  # 3Dグラフの高さを調整
         )
 
