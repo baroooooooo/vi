@@ -8,12 +8,17 @@ import numpy as np
 import os
 from in_it import parse_objectId, is_within_academic_year, save_random_data_to_csv
 from datetime import datetime
+import calendar
 
 
 def register_callbacks(app, calculated_results, all_extracted_data):
     global selected_attendance_numbers
     selected_attendance_numbers = []
 
+    for data in all_extracted_data:
+        if isinstance(data['timeStamp'], str):  # 文字列の場合のみ変換
+            data['timeStamp'] = datetime.strptime(data['timeStamp'], '%Y-%m-%d')
+    df = pd.DataFrame(all_extracted_data)
     # 異常検知機能用
     def detect_outliers(data, threshold=3.0):
         mean = np.mean(data)
@@ -24,6 +29,7 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         Output('parameter-graph', 'figure'),
         Output('graph-data', 'data'),
         Input('year-dropdown', 'value'),
+        Input('class-dropdown', 'value'),  # クラス選択を追加
         Input('parameter-dropdown', 'value'),
         Input('extra-parameter-dropdown', 'value'),
         Input('order-number', 'n_clicks'),
@@ -31,21 +37,42 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         Input('order-desc', 'n_clicks'),
         Input('toggle-outliers', 'n_clicks'),
     )
-    def update_bar_graph(selected_year, selected_parameter, selected_extra_parameter, order_number, order_asc, order_desc, toggle_outliers):
-        if not calculated_results or selected_year is None or selected_parameter is None:
-            return {'data': [], 'layout': {}}, None
+    
+    def update_bar_graph(selected_year, selected_classes, selected_parameter, selected_extra_parameter, order_number, order_asc, order_desc, toggle_outliers):
+        if not calculated_results or not selected_year or not selected_parameter:
+            # 空のグラフとデータを返す
+            return {'data': [], 'layout': {'title': 'No data available'}}, None
 
+        # データを取得
         year_data = calculated_results.get(selected_year, {})
 
-        save_random_data_to_csv(calculated_results, num_students=5, file_name="random_students_data.csv")
-        
+        # `selected_classes` をリストとして扱う
+        if not isinstance(selected_classes, (list, set)):
+            selected_classes = [selected_classes]
+
+        # クラスでフィルタリング
+        filtered_data = {
+            attendance_number: data
+            for attendance_number, data in year_data.items()
+            if data.get('classId') in selected_classes
+        }
+
+        if not filtered_data:
+            # データがない場合
+            return {'data': [], 'layout': {'title': 'No data available'}}, None
+
+        # フィルタ後のデータをリストに変換
         attendance_data = [
-            (attendance_number, year_data[attendance_number].get(selected_parameter, 0),
-            year_data[attendance_number].get(selected_extra_parameter, 0))
-            for attendance_number in year_data
-            if selected_parameter in year_data[attendance_number] and year_data[attendance_number].get(selected_extra_parameter) is not None
+            (
+                attendance_number,
+                data.get(selected_parameter, 0),
+                data.get(selected_extra_parameter, 0)
+            )
+            for attendance_number, data in filtered_data.items()
+            if selected_parameter in data and selected_extra_parameter in data
         ]
 
+        # 並べ替えの処理
         triggered_id = dash.callback_context.triggered_id
         if triggered_id == 'order-asc':
             attendance_data.sort(key=lambda x: x[1])
@@ -54,31 +81,28 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         elif triggered_id == 'order-number':
             attendance_data.sort(key=lambda x: int(x[0]))
 
+        # グラフに使用するデータを抽出
         attendance_numbers = [x[0] for x in attendance_data]
         y_values_original = [x[1] for x in attendance_data]
         y_values_extra = [x[2] for x in attendance_data]
 
         if not attendance_numbers:
+            # データがない場合
             return {'data': [], 'layout': {'title': 'No data available'}}, None
 
+        # 外れ値の処理
         use_outliers = toggle_outliers % 2 == 1 if toggle_outliers else False
+        processed_y_values_original = detect_outliers(y_values_original) if use_outliers else y_values_original
+        processed_y_values_extra = detect_outliers(y_values_extra) if use_outliers else y_values_extra
 
-        if use_outliers:
-            processed_y_values_original = detect_outliers(y_values_original)
-        else:
-            processed_y_values_original = y_values_original
-
+        # 正規化
         max_original_value = max(processed_y_values_original) if processed_y_values_original else 1
         normalized_y_values_original = [value / max_original_value for value in processed_y_values_original]
-
-        if use_outliers:
-            processed_y_values_extra = detect_outliers(y_values_extra)
-        else:
-            processed_y_values_extra = y_values_extra
 
         max_extra_value = max(processed_y_values_extra) if processed_y_values_extra else 1
         normalized_y_values_extra = [value / max_extra_value for value in processed_y_values_extra]
 
+        # ラベル
         parameter_labels = {
             'video_start_count': '動画再生回数',
             'audio_start_count': '音声再生回数',
@@ -95,11 +119,10 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             'continue_count': '復習回数',
             'test_result': '成績'
         }
-        # 日本語ラベルを使用してタイトルと凡例を設定
         selected_param_label = parameter_labels.get(selected_parameter, selected_parameter)
         extra_param_label = parameter_labels.get(selected_extra_parameter, selected_extra_parameter)
 
-
+        # グラフデータ
         original_data = go.Bar(
             x=attendance_numbers,
             y=normalized_y_values_original,
@@ -108,51 +131,69 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             marker={'color': 'rgba(255, 99, 71, 1)'},
             name=f'{selected_param_label} (メイン)',
             width=0.4,
-            hovertemplate=[f'Attendance Number: {attendance_numbers[i]}<br>{selected_parameter}: {normalized_y_values_original[i]:.2f}<br>Original Value: {y_values_original[i]}<extra></extra>' for i in range(len(attendance_numbers))]
+            customdata=attendance_numbers
         )
 
         extra_data_trace = go.Bar(
             x=attendance_numbers,
             y=normalized_y_values_extra,
             marker={'color': 'rgba(100, 150, 255, 1)'},
-            name=f'{extra_param_label} (サブ)',  # サブパラメータも日本語化
+            name=f'{extra_param_label} (サブ)',
             width=0.4,
-            hovertemplate=[f'Attendance Number: {attendance_numbers[i]}<br>{selected_extra_parameter}: {normalized_y_values_extra[i]:.2f}<br>Original Value: {y_values_extra[i]}<extra></extra>' for i in range(len(attendance_numbers))]
+            customdata=attendance_numbers
         )
 
         data = [original_data, extra_data_trace]
 
         layout = {
-            'title': f'{selected_param_label} と {extra_param_label}  ({selected_year})', 'font': {'size': 24},
-            'xaxis': {'title': '出席番号', 'type': 'category', 'font': {'size': 18},'tickfont': {'size': 10}},  # X軸ラベルのフォントサイズを小さく設定 ,
-            'yaxis': {'title': 'Normalized Values', 'font': {'size': 18}, 'tickfont': {'size': 10}},
+            'title': f'{selected_param_label} と {extra_param_label} ({selected_year})',
+            'xaxis': {'title': '出席番号', 'type': 'category'},
+            'yaxis': {'title': 'Normalized Values'},
             'barmode': 'group',
             'plot_bgcolor': 'rgba(240, 240, 240, 0.95)',
-            'bargap': 0.1,
-            'bargroupgap': 0.1,
-            'autosize': True,
-            'height': 400  # グラフの高さを小さく調整
+            'height': 400
         }
 
-        return {'data': data, 'layout': layout}, None
+        return {'data': data, 'layout': layout}, attendance_data
 
-    
+
+        
+    @app.callback(
+        Output('class-dropdown', 'options'),
+        Input('year-dropdown', 'value')
+    )
+    def update_class_dropdown(selected_year):
+        if not selected_year or selected_year not in calculated_results:
+            return []
+        
+        year_data = calculated_results[selected_year]
+        class_ids = set(student_data.get('classId') for student_data in year_data.values() if 'classId' in student_data)
+        return [{'label': f'Class {class_id}', 'value': class_id} for class_id in sorted(class_ids) if class_id is not None]
 
     @app.callback(
         Output('popup-graph', 'figure'),
         Input('x-parameter-dropdown', 'value'),  # X軸の入力
         Input('y-parameter-dropdown', 'value'),  # Y軸の入力
-        Input('year-dropdown', 'value'),
-        Input('toggle-outliers', 'n_clicks'),  # 外れ値を除外するトグルボタン
+        Input('year-dropdown', 'value'),         # 年度の入力
+        Input('class-dropdown', 'value'),        # クラスの入力
+        Input('toggle-outliers', 'n_clicks')     # 外れ値を除外するトグルボタン
     )
-    def update_scatter_plot(x_param, y_param, selected_year, toggle_outliers):
+    def update_scatter_plot(x_param, y_param, selected_year, selected_classes, toggle_outliers):
         if x_param and y_param and selected_year:
             year_data = calculated_results.get(selected_year, {})
+
+            # クラスによるフィルタリング
+            if selected_classes:
+                year_data = {
+                    attendance_number: data
+                    for attendance_number, data in year_data.items()
+                    if data.get('classId') in selected_classes
+                }
 
             # 出席番号とパラメータのリストを作成
             attendance_data_popup = [
                 (attendance_number,
-                year_data[attendance_number].get(x_param, 0), 
+                year_data[attendance_number].get(x_param, 0),
                 year_data[attendance_number].get(y_param, 0))
                 for attendance_number in year_data
                 if year_data[attendance_number].get(x_param) is not None and year_data[attendance_number].get(y_param) is not None
@@ -161,7 +202,7 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             if attendance_data_popup:
                 # 1次元データとして列ごとに分ける
                 attendance_numbers, x_values, y_values = zip(*attendance_data_popup)
-                
+
                 # DataFrameに変換
                 filtered_df = pd.DataFrame({
                     'attendance_number': attendance_numbers,
@@ -175,7 +216,6 @@ def register_callbacks(app, calculated_results, all_extracted_data):
                     filtered_df[x_param] = detect_outliers(filtered_df[x_param])
                     filtered_df[y_param] = detect_outliers(filtered_df[y_param])
 
-                # 散布図の作成
                 # パラメータ名の日本語ラベルを定義
                 parameter_labels = {
                     'video_start_count': '動画再生回数',
@@ -221,6 +261,7 @@ def register_callbacks(app, calculated_results, all_extracted_data):
                 return {}  # データが無い場合の処理
         else:
             return {}
+
 
 
 
@@ -340,59 +381,83 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             )
             }
     
+# UnitType選択に応じて月の選択肢を更新
+    @app.callback(
+        Output('month-dropdown', 'options'),
+        Input('unit-type-selector', 'value')
+    )
+    def update_month_options(selected_unit_type):
+        if selected_unit_type:
+            # 選択されたUnitTypeに基づいて、学習が行われた月をフィルタ
+            filtered_months = df[df['UnitType'] == selected_unit_type]['timeStamp'].dt.month.unique()
+            return [{'label': f'{month}月', 'value': month} for month in sorted(filtered_months)]
+        return []
+
+    # 月の選択に応じて日付の選択肢を更新
+    @app.callback(
+    Output('day-dropdown', 'options'),
+    [Input('month-dropdown', 'value')],
+    [State('unit-type-selector', 'value')]
+)
+    def update_day_options(selected_month, selected_unit_type):
+        if selected_unit_type and selected_month:
+            # UnitTypeと月に基づいて学習が行われた日をフィルタ
+            filtered_days = df[(df['UnitType'] == selected_unit_type) & (df['timeStamp'].dt.month == selected_month)]['timeStamp'].dt.day.unique()
+            # 月の最大日数を取得
+            max_day = calendar.monthrange(2023, selected_month)[1]  # 年は適宜変更可能
+            
+            # 選択肢に学習が行われた日とその月の全日を含む
+            return [{'label': f'{day}日', 'value': day} for day in range(1, max_day + 1) if day in filtered_days]
+        return []
+
+
+
+    # メインコールバック
     @app.callback(
         Output('3d-graph', 'figure'),
-        [Input('parameter-graph', 'clickData'),
-        Input('reset-button', 'n_clicks'),
-        Input('year-dropdown', 'value'),
-        Input('unit-type-selector', 'value')],
+        [
+            Input('parameter-graph', 'clickData'),
+            Input('reset-button', 'n_clicks'),
+            Input('year-dropdown', 'value'),
+            Input('unit-type-selector', 'value'),
+            Input('month-dropdown', 'value'),
+            Input('day-dropdown', 'value')
+        ],
         [State('selected-attendance-numbers', 'data')]
     )
-    def display_2d_or_3d_graph(click_data, reset_n_clicks, selected_year, unit_type, stored_numbers):
+    def display_2d_or_3d_graph(click_data, reset_n_clicks, selected_year, unit_type, selected_month, selected_day, stored_numbers):
         global selected_attendance_numbers
 
         # リセットボタンが押された場合の処理
         if reset_n_clicks and dash.callback_context.triggered_id == 'reset-button':
-            print("Reset button clicked, clearing selected attendance numbers")
             selected_attendance_numbers = []
-            return go.Figure()  # 空のグラフを返す
+            return go.Figure()
 
         # クリックデータがある場合、出席番号を取得
         if click_data and 'points' in click_data:
-            attendance_number = str(click_data['points'][0]['label'])  # 明示的にstrに変換
-            print(f"Selected attendance number from main graph: {attendance_number}")
+            attendance_number = str(click_data['points'][0]['label'])
         else:
             return dash.no_update
 
-        # 出席番号をリストに追加（重複しないように）
+        # 出席番号をリストに追加
         if attendance_number not in selected_attendance_numbers:
             selected_attendance_numbers.append(attendance_number)
 
-        print(f"Filtering data for Year: {selected_year}, UnitType: {unit_type}, Attendance Numbers: {selected_attendance_numbers}")
+        return generate_graph_with_review(selected_attendance_numbers, selected_year, unit_type, selected_month, selected_day)
 
-        # 選択された出席番号に基づいてグラフを生成
-        return generate_graph_with_review(selected_attendance_numbers, selected_year, unit_type)
+    # データをフィルタリングする関数
+    def filter_data(attendance_numbers, selected_year, unit_type=None, selected_month=None, selected_day=None):
+        filtered_data = [data for data in all_extracted_data if str(data['ID']) in attendance_numbers and is_within_academic_year(data['timeStamp'], selected_year)]
 
-
-    def filter_data(attendance_numbers, selected_year, unit_type=None):
-        # 年度と出席番号に基づいてフィルタリング
-        filtered_data = [data for data in all_extracted_data
-                        if str(data['ID']) in attendance_numbers
-                        and is_within_academic_year(data['timeStamp'], selected_year)]  # 学年度でフィルタ
-
-        print(f"Data after year and ID filtering: {len(filtered_data)}")
-
-        # ユニットタイプが指定されている場合のみフィルタリング
+        # フィルタの適用
+        if selected_month:
+            filtered_data = [data for data in filtered_data if data['timeStamp'].month == selected_month]
+        if selected_day:
+            filtered_data = [data for data in filtered_data if data['timeStamp'].day == selected_day]
         if unit_type:
-            print(f"Filtering by UnitType: {unit_type}")
             filtered_data = [data for data in filtered_data if data['UnitType'] == unit_type]
 
-        print(f"Data after UnitType filtering: {len(filtered_data)}")
-
-        # 時系列順にソート（timeStampフィールドを基準に昇順に並べる）
         filtered_data.sort(key=lambda x: x['timeStamp'])
-
-        # direction フィールドを計算して追加
         directions = calculate_direction(filtered_data)
 
         for i in range(len(filtered_data)):
@@ -400,95 +465,167 @@ def register_callbacks(app, calculated_results, all_extracted_data):
 
         return filtered_data
 
-
+    # 方向を計算する関数
     def calculate_direction(filtered_data):
         directions = []
         previous_unit_number = None
-
         for data in filtered_data:
-            current_unit_number = int(data.get('UnitNumber', 0))  # UnitNumber を整数で処理
+            current_unit_number = int(data.get('UnitNumber', 0))
             if previous_unit_number is None:
-                directions.append('Forward')  # 最初のエントリは Forward
+                directions.append('Forward')
             else:
-                if current_unit_number >= previous_unit_number:
-                    directions.append('Forward')
-                else:
-                    directions.append('Review')
+                directions.append('Forward' if current_unit_number >= previous_unit_number else 'Review')
             previous_unit_number = current_unit_number
-
         return directions
 
-
-    def generate_graph_with_review(attendance_numbers, selected_year, unit_type=None):
+    # グラフを生成する関数
+    def generate_graph_with_review(attendance_numbers, selected_year, unit_type=None, selected_month=None, selected_day=None):
         if not attendance_numbers:
-            print("No attendance numbers selected, returning empty figure.")
-            return go.Figure()  # 空のグラフを返す
+            return go.Figure()
 
-        filtered_data = filter_data(attendance_numbers, selected_year, unit_type)
+        filtered_data = filter_data(attendance_numbers, selected_year, unit_type, selected_month, selected_day)
         if not filtered_data:
-            print(f"No data available for Attendance {attendance_numbers}")
-            return go.Figure()  # データがない場合も空のグラフを返す
+            return go.Figure()
+        
+        # 横軸の範囲を計算
+        if selected_month:
+            # 選択された月の1日からその月の最終日まで
+            start_date = datetime(int(selected_year), int(selected_month), 1)
+            _, last_day = calendar.monthrange(int(selected_year), int(selected_month))
+            end_date = datetime(int(selected_year), int(selected_month), last_day)
+        else:
+            # デフォルトでは4月から翌年2月に設定
+            start_date = datetime(int(selected_year), 4, 1)
+            end_date = datetime(int(selected_year) + 1, 2, 28)
+            if (int(selected_year) + 1) % 4 == 0 and ((int(selected_year) + 1) % 100 != 0 or (int(selected_year) + 1) % 400 == 0):
+                end_date = datetime(int(selected_year) + 1, 2, 29)
 
         fig = go.Figure()
+        point_count = 0  # プロットされた点の数をカウントする変数
 
         for attendance_number in attendance_numbers:
             filtered_attendance_data = [data for data in filtered_data if str(data['ID']) == attendance_number]
             if not filtered_attendance_data:
                 continue
 
-            filtered_attendance_data.sort(key=lambda x: x['timeStamp'])
-            
             x_vals = [data['timeStamp'] for data in filtered_attendance_data]
-            y_vals = [int(data.get('UnitNumber', '0')) for data in filtered_attendance_data]
+            y_vals = [int(data.get('UnitNumber', 0)) for data in filtered_attendance_data]
             directions = [data.get('direction', 'Forward') for data in filtered_attendance_data]
 
-            # 全データを1つのセグメントとして扱い、進行方向によって線のスタイルを切り替える
             for i in range(1, len(x_vals)):
-                if directions[i] == 'Forward':
-                    fig.add_trace(go.Scatter(
-                        x=x_vals[i-1:i+1],
-                        y=y_vals[i-1:i+1],
-                        mode='lines+markers',
-                        line=dict(color='blue', width=2),
-                        marker=dict(symbol='triangle-up', size=8),
-                        showlegend=attendance_number == attendance_numbers[0] and i == 1  # 最初の進行のみ凡例表示
-                    ))
-                else:  # Review
-                    fig.add_trace(go.Scatter(
-                        x=x_vals[i-1:i+1],
-                        y=y_vals[i-1:i+1],
-                        mode='lines+markers',
-                        name=f'Attendance {attendance_number} - Review',
-                        line=dict(color='red', width=2, dash='dash'),
-                        marker=dict(symbol='triangle-down', size=8),
-                        showlegend=attendance_number == attendance_numbers[0] and i == 1  # 最初のレビューのみ凡例表示
-                    ))
+                fig.add_trace(go.Scatter(
+                    x=x_vals[i-1:i+1],
+                    y=y_vals[i-1:i+1],
+                    mode='lines+markers',
+                    line=dict(color='blue' if directions[i] == 'Forward' else 'red', width=2),
+                    marker=dict(symbol='triangle-up' if directions[i] == 'Forward' else 'triangle-down', size=8),
+                    hovertemplate="%{x|%B %d, %H:%M}<br>Unit番号: %{y}<extra></extra>"
+                ))
+                point_count += 1  # 点をカウント
 
         fig.update_layout(
-            title={
-                'text': f'ID {attendance_numbers} の時系列データ',
-                'font': {'size': 35}  # フォントサイズを24に設定
-            },
-            xaxis_title={
-                'text': '日付',
-                'font': {'size': 35}  # フォントサイズを24に設定
-            },
-            yaxis_title={
-                'text': 'Unit番号',
-                'font': {'size': 35}  # フォントサイズを24に設定
-            },
+            title={'text': f'ID {attendance_numbers} の時系列データ', 'font': {'size': 25}},
+            xaxis_title={'text': '日付', 'font': {'size': 25}},
+            yaxis_title={'text': 'Unit番号', 'font': {'size': 25}},
             xaxis=dict(
-                tickformat='%b %Y',
-                tickfont={'size': 20}  # X軸ラベルのフォントサイズ
+                range=[start_date, end_date],  # 選択された月の範囲またはデフォルト範囲
+                tickformat='%d' if selected_month else '%b %Y',
+                tickfont={'size': 20}
+            ),
+            yaxis=dict(dtick=1, tickfont={'size': 20}),
+            height=400
+        )
+
+        # 日付が指定されている場合、その日付の時間範囲を強調
+        if selected_year and selected_month and selected_day:
+            selected_date = datetime(int(selected_year), int(selected_month), int(selected_day))
+            fig.update_xaxes(
+                range=[selected_date.replace(hour=0, minute=0, second=0),
+                    selected_date.replace(hour=23, minute=59, second=59)],
+                tickformat="%H:%M"
+            )
+
+        return fig
+    
+    @app.callback(
+        Output('ordered-learning-line-graph', 'figure'),
+        Input('parameter-graph', 'clickData'),  # メイングラフでクリックしたデータ
+        State('year-dropdown', 'value'),
+        State('class-dropdown', 'value'),
+        State('toggle-outliers', 'n_clicks')
+    )
+    def update_ordered_learning_line_graph(click_data, selected_year, selected_class, toggle_outliers):
+        """
+        メイングラフからクリックしたときに学習履歴を折れ線グラフで可視化。
+        """
+        if not click_data or not all_extracted_data:
+            return {'data': [], 'layout': {'title': 'No data available'}}
+
+        # クリックされたデータポイントから学習者IDを抽出
+        selected_id = click_data['points'][0]['customdata']  # `customdata` に学習者IDが設定されている前提
+        
+
+        # 指定された学習者、年度、クラスのデータをフィルタリング
+        filtered_data = [
+            entry for entry in all_extracted_data
+            if entry['ID'] == selected_id and
+            entry['Year'] == str(selected_year) and
+            (selected_class is None or entry['classId'] == selected_class)
+        ]
+        filtered_data = [
+            entry for entry in all_extracted_data
+            if str(entry['ID']) == str(selected_id) and entry['Year'] == str(selected_year)
+        ]
+
+        # 学習順序でソート
+        sorted_data = sorted(filtered_data, key=lambda x: x['sequence'])
+
+        # DataFrameに変換
+        df = pd.DataFrame(sorted_data)
+
+        # 外れ値を処理（トグルボタンの状態を確認）
+        use_outliers = toggle_outliers % 2 == 1 if toggle_outliers else False
+        if use_outliers:
+            df['UnitNumber'] = detect_outliers(df['UnitNumber'])
+
+        # 折れ線グラフを作成
+        fig = px.line(
+            df,
+            x='sequence',
+            y='UnitNumber',
+            color='UnitType',  # ユニットタイプごとに色分け
+            markers=True,  # データ点を表示
+            hover_data=['timeStamp', 'classId', 'objectId', 'ID'],  # ホバー時の詳細情報
+            title=f"学習履歴順序（折れ線グラフ） - 年度: {selected_year}, クラス: {selected_class or '全体'}",
+            labels={'sequence': '学習順序', 'UnitNumber': 'ユニット番号'}
+        )
+
+        # レイアウトの調整
+        fig.update_layout(
+            xaxis_title="学習順序 (順番)",
+            yaxis_title="ユニット番号",
+            xaxis=dict(
+                showgrid=True,
+                tickmode="linear",  # 連続的な軸を使用
+                dtick=int(len(df['sequence']) / 6)  # x軸のラベルを6段階に間引く
             ),
             yaxis=dict(
-                dtick=1,
-                tickfont={'size': 20}  # Y軸ラベルのフォントサイズ
+                showgrid=True,
+                dtick=1
             ),
-            height=400  # 3Dグラフの高さを調整
+            height=600,
+            plot_bgcolor="rgba(240, 240, 240, 0.95)",
+            legend_title_text="ユニットタイプ"
+        )
+
+        # 折れ線とマーカーのスタイルを調整
+        fig.update_traces(
+            line=dict(width=2),
+            marker=dict(size=8, opacity=0.8)
         )
 
         return fig
+
 
 
 
@@ -519,4 +656,4 @@ def register_callbacks(app, calculated_results, all_extracted_data):
 
 
 
-
+        

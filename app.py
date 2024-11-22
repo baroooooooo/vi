@@ -6,6 +6,8 @@ from flask import Flask, redirect
 from graph import register_callbacks
 from in_it import prepare_and_collect_data, load_data_result  # load_result_dataをインポート
 from data_processing import create_3d_plot
+from datetime import datetime
+import pandas as pd
 
 # Flaskサーバーの作成
 server = Flask(__name__)
@@ -24,7 +26,10 @@ calculated_results, all_extracted_data = prepare_and_collect_data(directory, res
 # 年度のオプションを追加
 years = list(calculated_results.keys())  # ディレクトリから取得した年
 year_options = [{'label': str(year), 'value': year} for year in years]
-
+for data in all_extracted_data:
+    if isinstance(data['timeStamp'], str):  # 文字列の場合のみ変換
+        data['timeStamp'] = datetime.strptime(data['timeStamp'], '%Y-%m-%d')
+df = pd.DataFrame(all_extracted_data)
 # Dashのレイアウト
 app.layout = html.Div([
     html.H2("KoToToMo Plus Visualizer", style={'text-align': 'center', 'padding-bottom': '20px'}),
@@ -49,6 +54,23 @@ app.layout = html.Div([
             ),
         ], style={'margin': '0 10px'}),  # 余白を調整
 
+        html.Div([
+            dcc.Dropdown(
+                id='class-dropdown',
+                options=[],  # 後でコールバックで更新
+                placeholder='クラスを選択',
+                multi=True,
+                style={
+                    'width': '200px',
+                    'font-size': '24px',
+                    'text-align': 'center',
+                    'display': 'inline-block',
+                    'vertical-align': 'middle',
+                    'border': '2px solid black',  # 枠線を太く、濃く設定
+                    'border-radius': '5px'  # 角を少し丸める（オプション）
+                }
+            ),
+        ],style={'margin': '0 10px'}),
 
         # パラメータ選択のドロップダウン
         html.Div([
@@ -194,15 +216,7 @@ app.layout = html.Div([
 
     ], style={'display': 'flex', 'flex-wrap': 'wrap', 'justify-content': 'center', 'align-items': 'center', 'gap': '10px', 'padding': '10px'}),  # レイアウトを一列に並べるためのスタイル
 
-    dcc.RadioItems(
-        id='unit-type-selector',
-        options=[
-            {'label': 'Main Unit', 'value': 'MainUnit'},
-            {'label': 'Basic Unit', 'value': 'BasicUnit'}
-        ],
-        value='MainUnit',
-        labelStyle={'display': 'inline-block', 'margin-right': '20px'}
-    ),
+    
     html.Div([
         dcc.Graph(
             id='parameter-graph',
@@ -233,25 +247,45 @@ app.layout = html.Div([
                 }
             }
         ),
-        html.Button('Reset Graph', id='reset-button', n_clicks=0, style={'margin-top': '1px', 'margin-bottom': '1px'}),  # ボタンの余白を小さく
-        dcc.Graph(
-            id='3d-graph',
-            style={'height': '70vh', 'width': '95%', 'margin-top': '0px'},
-            config={'displayModeBar': False},
-            figure={
-                'layout': {
-                    'margin': {
-                        'l': 0, 'r': 0, 'b': 0, 't': 0
-                    },
-                    'autosize': True
+    ]),
+    html.Div([ 
+            
+            dcc.Dropdown(id='unit-type-selector', options=[{'label': ut, 'value': ut} for ut in df['UnitType'].unique()], placeholder="Select Unit Type"),
+            dcc.Dropdown(id='month-dropdown', options=[{'label': f'{month}月', 'value': month} for month in sorted(df['timeStamp'].dt.month.unique())], placeholder="Select a month"),
+            dcc.Dropdown(id='day-dropdown', placeholder="Select a day"),
+            html.Button('Reset Graph', id='reset-button', n_clicks=0, style={'margin-top': '1px', 'margin-bottom': '1px'}),  # ボタンの余白を小さく
+            dcc.Graph(
+                id='3d-graph',
+                style={'height': '70vh', 'width': '95%', 'margin-top': '0px'},
+                config={'displayModeBar': False},
+                figure={
+                    'layout': {
+                        'margin': {
+                            'l': 0, 'r': 0, 'b': 0, 't': 0
+                        },
+                        'autosize': True
+                    }
                 }
-            }
-        ),
-    ], style={'padding': '0', 'margin': '0', 'display': 'flex', 'flex-direction': 'column', 'align-items': 'center'}),
+            ),
+            dcc.Graph(
+                id='ordered-learning-line-graph',
+                style={'height': '70vh', 'width': '95%', 'margin-top': '0px'},
+                config={'displayModeBar': False},
+                figure={
+                    'layout': {
+                        'margin': {
+                            'l': 0, 'r': 0, 'b': 0, 't': 0
+                        },
+                        'autosize': True
+                    }
+                }
+            ),
+    ]),
     dcc.Store(id='graph-data', data=[]),
     dcc.Store(id='selected-attendance-numbers', data=[]),
     html.Button('外れ値の除外ボタン', id='toggle-outliers', n_clicks=0)
 ])
+
 
 
 

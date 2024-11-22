@@ -114,10 +114,13 @@ def prepare_data(data_directory, result_data):
     return data_dict
 
 def prepare_and_collect_data(data_directory, result_data):
+    """
+    データディレクトリからデータを収集し、classId を含めて集計。
+    """
     data_dict = {}
     all_extracted_data = []
 
-    print(f'Preparing data from directory: {data_directory}')  # デバッグ: ディレクトリの確認
+    print(f'Preparing data from directory: {data_directory}')  # デバッグ用メッセージ
 
     for root, dirs, files in os.walk(data_directory):
         year = os.path.basename(root)  # ディレクトリ名から年を取得
@@ -140,6 +143,10 @@ def prepare_and_collect_data(data_directory, result_data):
                     counts_and_times = calculate_counts_and_times(data)
                     counts_and_times['test_result'] = test_result
 
+                    # classId を抽出してカウントデータに追加
+                    data['classId'] = data['extension'].apply(extract_class_id)
+                    counts_and_times['classId'] = data['classId'].mode().iloc[0] if not data['classId'].isnull().all() else None
+
                     if year not in data_dict:
                         data_dict[year] = {}
                     data_dict[year][attendance_number] = counts_and_times
@@ -147,12 +154,11 @@ def prepare_and_collect_data(data_directory, result_data):
                     # フィールドを抽出
                     extracted_data = extract_id_object_timestamp(data, year)
 
-                    # 各データに年と成績を追加
+                    # 各データに年、成績、クラスIDを追加
                     for item in extracted_data:
                         item['Year'] = year
                         item['test_result'] = test_result
-
-                   
+                        item['classId'] = counts_and_times['classId']
 
                     # リストに追加
                     all_extracted_data.extend(extracted_data)
@@ -161,14 +167,43 @@ def prepare_and_collect_data(data_directory, result_data):
 
     return data_dict, all_extracted_data
 
+def extract_class_id(extension_str):
+    """
+    'extension' フィールドから 'classId' を抽出。
+    """
+    try:
+        extension_data = json.loads(extension_str)
+        if isinstance(extension_data, list):
+            return extension_data[0].get("classId", None)  # リストの場合は最初の要素から取得
+        elif isinstance(extension_data, dict):
+            return extension_data.get("classId", None)  # 辞書の場合は直接取得
+    except (json.JSONDecodeError, KeyError, IndexError, TypeError):
+        return None  # エラー時は None を返す
+
 
 def extract_id_object_timestamp(data, year):
     extracted_data = []
-    
+
     for index, row in data.iterrows():
         try:
             # 'actor'フィールドを解析して 'openId' を取得
             try:
+                verb_json = json.loads(row.get('verb', '[]'))
+                if not isinstance(verb_json, list):
+                    print(f"Unexpected verb format for row {index}: {row['verb']}")
+                    continue
+
+                # "display" 値を取得
+                display_value = None
+                for verb_item in verb_json:
+                    if 'display' in verb_item:
+                        display_value = verb_item['display']
+                        break
+
+                # "display" 値が条件を満たすか確認
+                if display_value not in ['started', 'recorded', 'played']:
+                    continue
+
                 actor_json = json.loads(row['actor'])
                 if not isinstance(actor_json, list):
                     print(f"Unexpected actor format for row {index}: {row['actor']}")
@@ -206,7 +241,6 @@ def extract_id_object_timestamp(data, year):
 
             # 'objectId'からUnitタイプと番号を解析
             unit_type, unit_number = parse_objectId(objectId)
-            
             if unit_type is None or unit_number is None:
                 continue
 
@@ -216,23 +250,36 @@ def extract_id_object_timestamp(data, year):
             if timeStamp is None:
                 continue
 
-            # 年月日のみを抽出 (年は無視)
+            # 年月日のみを抽出
             date_only = timeStamp.strftime('%Y-%m-%d')
 
-            # 抽出したデータを追加、優先するのは元のYear
+            # 'extension' フィールドから 'classId' を抽出
+            classId = extract_class_id(row.get('extension', '{}'))
+
+            # 抽出したデータを追加
             extracted_data.append({
                 'ID': openId,
                 'UnitType': unit_type,
                 'UnitNumber': unit_number,
                 'timeStamp': timeStamp,
-                'date_only': date_only,  # 年月日のみ使用、年は含まない
-                'Year': str(year)  # 元のYearを優先
+                'date_only': date_only,
+                'Year': str(year),
+                'classId': classId,
+                'objectId': objectId  # objectId を追加
             })
         except Exception as e:
             print(f"行 {index} の処理中にエラーが発生しました: {e}")
             continue
 
-    return extracted_data
+    # データを時系列順に並べ替え
+    sorted_data = sorted(extracted_data, key=lambda x: x['timeStamp'])
+
+    # 順番を計算して追加
+    for i, entry in enumerate(sorted_data):
+        entry['sequence'] = i + 1  # 順番を 1 から始める
+
+    return sorted_data
+
 
 
 
@@ -272,6 +319,7 @@ def parse_objectId(objectId):
     except Exception as e:
         print(f"Error parsing objectId {objectId}: {e}")
         return None, None
+
 
 
 
