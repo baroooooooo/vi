@@ -181,72 +181,66 @@ def extract_class_id(extension_str):
         return None  # エラー時は None を返す
 
 
+def parse_objectId(objectId):
+    """
+    'objectId' から 'MainUnit' または 'BasicUnit' とその番号を解析し、
+    grammar, pronunciation, speaking, listening を判定して返す。
+    """
+    try:
+        parts = objectId.split('/')  # '/' で分割
+
+        # 必要な情報が含まれていない場合、エントリを無視
+        if len(parts) < 3:
+            return None, None, None
+
+        # フォーマットに基づいてユニットタイプと番号を取得
+        unit_type = None
+        unit_number = None
+        activity_type = None
+
+        if 'MainUnit' in parts[1] or 'BasicUnit' in parts[1]:
+            unit_type = parts[1]
+            unit_number = parts[2] if parts[2].isdigit() else None  # ユニット番号が数値であることを確認
+
+            # `grammar`, `pronunciation`, `speaking`, `listening` を判定
+            for keyword in ['grammar', 'pronunciation', 'speaking', 'listening']:
+                if keyword in objectId:
+                    activity_type = keyword
+                    break
+
+        # 必須情報が欠けている場合は無効
+        if not unit_type or not unit_number:
+            return None, None, None
+
+        return unit_type, unit_number, activity_type
+
+    except Exception as e:
+        print(f"Error parsing objectId {objectId}: {e}")
+        return None, None, None
+
+
 def extract_id_object_timestamp(data, year):
     extracted_data = []
 
     for index, row in data.iterrows():
         try:
             # 'actor'フィールドを解析して 'openId' を取得
-            try:
-                verb_json = json.loads(row.get('verb', '[]'))
-                if not isinstance(verb_json, list):
-                    print(f"Unexpected verb format for row {index}: {row['verb']}")
-                    continue
+            actor_json = json.loads(row['actor'])
+            openId = actor_json[0].get('openId', 'unknown') if isinstance(actor_json, list) else 'unknown'
 
-                # "display" 値を取得
-                display_value = None
-                for verb_item in verb_json:
-                    if 'display' in verb_item:
-                        display_value = verb_item['display']
-                        break
-
-                # "display" 値が条件を満たすか確認
-                if display_value not in ['started', 'recorded', 'played']:
-                    continue
-
-                actor_json = json.loads(row['actor'])
-                if not isinstance(actor_json, list):
-                    print(f"Unexpected actor format for row {index}: {row['actor']}")
-                    continue
-            except json.JSONDecodeError:
-                print(f"Failed to parse actor JSON for row {index}: {row['actor']}")
-                continue
-
-            openId = None
-            for actor in actor_json:
-                if 'openId' in actor:
-                    openId = actor['openId']
-                    break
-            if openId is None:
-                openId = 'unknown'
-
-            # 'object'フィールドを解析して 'objectId' を取得
-            try:
-                object_json = json.loads(row['object'])
-                if not isinstance(object_json, list):
-                    print(f"Unexpected object format for row {index}: {row['object']}")
-                    continue
-            except json.JSONDecodeError:
-                print(f"Failed to parse object JSON for row {index}: {row['object']}")
-                continue
-
-            objectId = None
-            for obj in object_json:
-                if 'objectId' in obj:
-                    objectId = obj['objectId']
-                    break
-
+            # 'objectId'を解析
+            object_json = json.loads(row['object'])
+            objectId = object_json[0].get('objectId') if isinstance(object_json, list) else None
             if objectId is None:
                 continue
 
-            # 'objectId'からUnitタイプと番号を解析
-            unit_type, unit_number = parse_objectId(objectId)
+            # 'objectId'からUnitタイプ、番号、およびアクティビティタイプを解析
+            unit_type, unit_number, activity_type = parse_objectId(objectId)
             if unit_type is None or unit_number is None:
                 continue
 
             # 'timeStamp'を解析
-            timeStamp_str = row['timeStamp']
-            timeStamp = parse_timeStamp(timeStamp_str)
+            timeStamp = parse_timeStamp(row['timeStamp'])
             if timeStamp is None:
                 continue
 
@@ -256,16 +250,17 @@ def extract_id_object_timestamp(data, year):
             # 'extension' フィールドから 'classId' を抽出
             classId = extract_class_id(row.get('extension', '{}'))
 
-            # 抽出したデータを追加
+            # データを追加
             extracted_data.append({
                 'ID': openId,
                 'UnitType': unit_type,
                 'UnitNumber': unit_number,
+                'ActivityType': activity_type,
                 'timeStamp': timeStamp,
                 'date_only': date_only,
                 'Year': str(year),
                 'classId': classId,
-                'objectId': objectId  # objectId を追加
+                'objectId': objectId
             })
         except Exception as e:
             print(f"行 {index} の処理中にエラーが発生しました: {e}")
@@ -274,51 +269,22 @@ def extract_id_object_timestamp(data, year):
     # データを時系列順に並べ替え
     sorted_data = sorted(extracted_data, key=lambda x: x['timeStamp'])
 
-    # 順番を計算して追加
+    # 全体順序を記録
     for i, entry in enumerate(sorted_data):
-        entry['sequence'] = i + 1  # 順番を 1 から始める
+        entry['sequence_global'] = i + 1  # 全体順序
+
+    # 形式別順序を記録
+    activity_groups = {}
+    for entry in sorted_data:
+        activity_groups.setdefault(entry['ActivityType'], []).append(entry)
+
+    for activity, entries in activity_groups.items():
+        for i, entry in enumerate(entries):
+            entry['sequence_activity'] = i + 1  # 形式別順序
 
     return sorted_data
 
 
-
-
-
-
-
-
-def parse_objectId(objectId):
-    """
-    'objectId' から 'MainUnit' または 'BasicUnit' とその番号を解析し、返す。
-    例:
-    'kototomo/BasicUnit/2/basic_pronunciation/2' -> ('BasicUnit', '2')
-    'kototomo/MainUnit/1/listening/6/01-6.mp3' -> ('MainUnit', '1')
-    """
-    try:
-        parts = objectId.split('/')  # '/' で分割
-
-        # 必要な情報が含まれていない場合、エントリを無視
-        if len(parts) < 3:
-            # 必要な形式（例: 'kototomo/MainUnit/9'）を満たさないものは無視
-            return None, None
-
-        # フォーマットに基づいてユニットタイプと番号を取得
-        if 'MainUnit' in parts[1] or 'BasicUnit' in parts[1]:
-            unit_type = parts[1]
-            unit_number = parts[2] if parts[2].isdigit() else None  # ユニット番号が数値であることを確認
-
-            if unit_number is None:
-                # ユニット番号が不正（数値でない）の場合は無視
-                return None, None
-
-            return unit_type, unit_number
-        else:
-            # ユニットタイプが不明の場合も無視
-            return None, None
-
-    except Exception as e:
-        print(f"Error parsing objectId {objectId}: {e}")
-        return None, None
 
 
 

@@ -35,6 +35,12 @@ app.layout = html.Div([
     html.H2("KoToToMo Plus Visualizer", style={'text-align': 'center', 'padding-bottom': '20px'}),
 
     html.Div([
+        dcc.Checklist(
+            id='normalize-toggle',
+            options=[{'label': '正規化する', 'value': 'normalize'}],
+            value=[],  # デフォルトは未選択
+            inline=True
+        ),
         # 年選択のドロップダウン
         html.Div([
             dcc.Dropdown(
@@ -60,6 +66,7 @@ app.layout = html.Div([
                 options=[],  # 後でコールバックで更新
                 placeholder='クラスを選択',
                 multi=True,
+                clearable=True,
                 style={
                     'width': '200px',
                     'font-size': '24px',
@@ -127,14 +134,13 @@ app.layout = html.Div([
                 ],
                 value=None,
                 placeholder="追加パラメータを選択してください",
+                clearable=True,
                 style={
                     'width': '200px',
                     'font-size': '24px',
-                    'text-align': 'center',
-                    'display': 'inline-block',
                     'vertical-align': 'middle',
-                    'border': '2px solid black',  # 枠線を太く、濃く設定
-                    'border-radius': '5px'  # 角を少し丸める（オプション）
+                    'border': '1px solid #ccc',  # 通常の枠線
+                    'border-radius': '4px',  # 標準的な角丸
                 }
             ),
         ], style={'margin': '0 10px'}),
@@ -267,6 +273,7 @@ app.layout = html.Div([
                     }
                 }
             ),
+            html.Button(id='reset-learning-order-button', n_clicks=0),
             dcc.Graph(
                 id='ordered-learning-line-graph',
                 style={'height': '70vh', 'width': '95%', 'margin-top': '0px'},
@@ -280,6 +287,36 @@ app.layout = html.Div([
                     }
                 }
             ),
+            html.Div([
+                dcc.Dropdown(
+                    id='activity-type-dropdown',
+                    options=[
+                        {'label': 'Grammar', 'value': 'grammar'},
+                        {'label': 'Pronunciation', 'value': 'pronunciation'},
+                        {'label': 'Speaking', 'value': 'speaking'},
+                        {'label': 'Listening', 'value': 'listening'}
+                    ],
+                    value=None,  # デフォルトで選択なし
+                    placeholder="アクティビティタイプを選択してください",
+                    clearable=True,
+                    style={
+                        'width': '200px',
+                        'font-size': '16px',
+                        'margin-bottom': '10px'
+                    }
+                ),
+                dcc.RadioItems(
+                    id='order-radio',
+                    options=[
+                        {'label': '全体順序', 'value': '全体'},
+                        {'label': '形式別順序', 'value': '形式別'}
+                    ],
+                    value='全体',  # デフォルトで全体順序を選択
+                    inline=True,  # 横並びに表示
+                    labelStyle={'margin-right': '10px'}
+                )
+            ]),
+
     ]),
     dcc.Store(id='graph-data', data=[]),
     dcc.Store(id='selected-attendance-numbers', data=[]),

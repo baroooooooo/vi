@@ -29,47 +29,49 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         Output('parameter-graph', 'figure'),
         Output('graph-data', 'data'),
         Input('year-dropdown', 'value'),
-        Input('class-dropdown', 'value'),  # クラス選択を追加
+        Input('class-dropdown', 'value'),
         Input('parameter-dropdown', 'value'),
-        Input('extra-parameter-dropdown', 'value'),
+        Input('extra-parameter-dropdown', 'value'),  # ドロップダウンがリセット可能
         Input('order-number', 'n_clicks'),
         Input('order-asc', 'n_clicks'),
         Input('order-desc', 'n_clicks'),
         Input('toggle-outliers', 'n_clicks'),
+        Input('normalize-toggle', 'value')  # 正規化トグルボタン
     )
-    
-    def update_bar_graph(selected_year, selected_classes, selected_parameter, selected_extra_parameter, order_number, order_asc, order_desc, toggle_outliers):
+    def update_bar_graph(
+        selected_year, selected_classes, selected_parameter, selected_extra_parameter,
+        order_number, order_asc, order_desc, toggle_outliers, normalize_toggle
+    ):
         if not calculated_results or not selected_year or not selected_parameter:
-            # 空のグラフとデータを返す
             return {'data': [], 'layout': {'title': 'No data available'}}, None
 
         # データを取得
         year_data = calculated_results.get(selected_year, {})
 
-        # `selected_classes` をリストとして扱う
-        if not isinstance(selected_classes, (list, set)):
-            selected_classes = [selected_classes]
-
-        # クラスでフィルタリング
-        filtered_data = {
-            attendance_number: data
-            for attendance_number, data in year_data.items()
-            if data.get('classId') in selected_classes
-        }
+        # クラスでフィルタリング（クラスが未選択の場合は全体を表示）
+        if selected_classes:
+            if not isinstance(selected_classes, (list, set)):
+                selected_classes = [selected_classes]
+            filtered_data = {
+                attendance_number: data
+                for attendance_number, data in year_data.items()
+                if data.get('classId') in selected_classes
+            }
+        else:
+            filtered_data = year_data
 
         if not filtered_data:
-            # データがない場合
             return {'data': [], 'layout': {'title': 'No data available'}}, None
 
-        # フィルタ後のデータをリストに変換
+        # データをリストに変換
         attendance_data = [
             (
                 attendance_number,
                 data.get(selected_parameter, 0),
-                data.get(selected_extra_parameter, 0)
+                data.get(selected_extra_parameter, 0) if selected_extra_parameter else None
             )
             for attendance_number, data in filtered_data.items()
-            if selected_parameter in data and selected_extra_parameter in data
+            if selected_parameter in data
         ]
 
         # 並べ替えの処理
@@ -81,26 +83,23 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         elif triggered_id == 'order-number':
             attendance_data.sort(key=lambda x: int(x[0]))
 
-        # グラフに使用するデータを抽出
+        # グラフデータを抽出
         attendance_numbers = [x[0] for x in attendance_data]
         y_values_original = [x[1] for x in attendance_data]
-        y_values_extra = [x[2] for x in attendance_data]
+        y_values_extra = [x[2] for x in attendance_data] if selected_extra_parameter else None
 
         if not attendance_numbers:
-            # データがない場合
             return {'data': [], 'layout': {'title': 'No data available'}}, None
 
-        # 外れ値の処理
-        use_outliers = toggle_outliers % 2 == 1 if toggle_outliers else False
-        processed_y_values_original = detect_outliers(y_values_original) if use_outliers else y_values_original
-        processed_y_values_extra = detect_outliers(y_values_extra) if use_outliers else y_values_extra
+        # 正規化の処理
+        normalize = 'normalize' in normalize_toggle
+        if normalize:
+            max_original_value = max(y_values_original) if y_values_original else 1
+            y_values_original = [value / max_original_value for value in y_values_original]
 
-        # 正規化
-        max_original_value = max(processed_y_values_original) if processed_y_values_original else 1
-        normalized_y_values_original = [value / max_original_value for value in processed_y_values_original]
-
-        max_extra_value = max(processed_y_values_extra) if processed_y_values_extra else 1
-        normalized_y_values_extra = [value / max_extra_value for value in processed_y_values_extra]
+            if y_values_extra:
+                max_extra_value = max(y_values_extra) if y_values_extra else 1
+                y_values_extra = [value / max_extra_value for value in y_values_extra]
 
         # ラベル
         parameter_labels = {
@@ -120,41 +119,48 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             'test_result': '成績'
         }
         selected_param_label = parameter_labels.get(selected_parameter, selected_parameter)
-        extra_param_label = parameter_labels.get(selected_extra_parameter, selected_extra_parameter)
+        extra_param_label = parameter_labels.get(selected_extra_parameter, selected_extra_parameter) if selected_extra_parameter else None
 
         # グラフデータ
         original_data = go.Bar(
             x=attendance_numbers,
-            y=normalized_y_values_original,
+            y=y_values_original,
             text=attendance_numbers,
             textposition='outside',
             marker={'color': 'rgba(255, 99, 71, 1)'},
             name=f'{selected_param_label} (メイン)',
             width=0.4,
-            customdata=attendance_numbers
+            customdata=attendance_numbers  # ここでcustomdataを設定
         )
 
-        extra_data_trace = go.Bar(
-            x=attendance_numbers,
-            y=normalized_y_values_extra,
-            marker={'color': 'rgba(100, 150, 255, 1)'},
-            name=f'{extra_param_label} (サブ)',
-            width=0.4,
-            customdata=attendance_numbers
-        )
+        data = [original_data]
 
-        data = [original_data, extra_data_trace]
+        if selected_extra_parameter and y_values_extra:
+            extra_data_trace = go.Bar(
+                x=attendance_numbers,
+                y=y_values_extra,
+                marker={'color': 'rgba(100, 150, 255, 1)'},
+                name=f'{extra_param_label} (サブ)',
+                width=0.4,
+                customdata=attendance_numbers
+            )
+            data.append(extra_data_trace)
 
         layout = {
-            'title': f'{selected_param_label} と {extra_param_label} ({selected_year})',
+            'title': f'{selected_param_label} ({selected_year})' + (f' と {extra_param_label}' if selected_extra_parameter else ''),
             'xaxis': {'title': '出席番号', 'type': 'category'},
-            'yaxis': {'title': 'Normalized Values'},
+            'yaxis': {'title': 'Normalized Values' if normalize else 'Values'},
             'barmode': 'group',
             'plot_bgcolor': 'rgba(240, 240, 240, 0.95)',
             'height': 400
         }
 
         return {'data': data, 'layout': layout}, attendance_data
+
+
+
+
+
 
 
         
@@ -549,82 +555,159 @@ def register_callbacks(app, calculated_results, all_extracted_data):
     
     @app.callback(
         Output('ordered-learning-line-graph', 'figure'),
-        Input('parameter-graph', 'clickData'),  # メイングラフでクリックしたデータ
-        State('year-dropdown', 'value'),
-        State('class-dropdown', 'value'),
-        State('toggle-outliers', 'n_clicks')
+        [
+            Input('parameter-graph', 'clickData'),  # メイングラフでクリックしたデータ
+            Input('order-radio', 'value')  # ラジオボタンから全体 or 形式別を取得
+        ],
+        [
+            State('year-dropdown', 'value'),
+            State('class-dropdown', 'value'),
+            State('toggle-outliers', 'n_clicks')
+        ]
     )
-    def update_ordered_learning_line_graph(click_data, selected_year, selected_class, toggle_outliers):
-        """
-        メイングラフからクリックしたときに学習履歴を折れ線グラフで可視化。
-        """
+    def update_ordered_learning_line_graph(click_data, order_selection, selected_year, selected_class, toggle_outliers):
         if not click_data or not all_extracted_data:
             return {'data': [], 'layout': {'title': 'No data available'}}
 
         # クリックされたデータポイントから学習者IDを抽出
-        selected_id = click_data['points'][0]['customdata']  # `customdata` に学習者IDが設定されている前提
-        
+        selected_id = click_data['points'][0]['customdata']
 
         # 指定された学習者、年度、クラスのデータをフィルタリング
         filtered_data = [
             entry for entry in all_extracted_data
-            if entry['ID'] == selected_id and
+            if str(entry['ID']) == str(selected_id) and
             entry['Year'] == str(selected_year) and
             (selected_class is None or entry['classId'] == selected_class)
         ]
-        filtered_data = [
-            entry for entry in all_extracted_data
-            if str(entry['ID']) == str(selected_id) and entry['Year'] == str(selected_year)
-        ]
 
-        # 学習順序でソート
-        sorted_data = sorted(filtered_data, key=lambda x: x['sequence'])
+        if not filtered_data:
+            return {'data': [], 'layout': {'title': 'No data available'}}
 
-        # DataFrameに変換
-        df = pd.DataFrame(sorted_data)
+        # 全体順序を使用
+        if order_selection == '全体':
+            df = pd.DataFrame(sorted(filtered_data, key=lambda x: x['sequence_global']))
+            x_axis = 'sequence_global'
+            title = f"全体の学習履歴順序 - 年度: {selected_year}, クラス: {selected_class or '全体'}"
+            
+            # UnitNumber を数値型に変換
+            df['UnitNumber'] = pd.to_numeric(df['UnitNumber'], errors='coerce')
+            df = df.dropna(subset=['UnitNumber'])
 
-        # 外れ値を処理（トグルボタンの状態を確認）
-        use_outliers = toggle_outliers % 2 == 1 if toggle_outliers else False
-        if use_outliers:
-            df['UnitNumber'] = detect_outliers(df['UnitNumber'])
+            # 差分を計算
+            df['difference'] = df['UnitNumber'].diff()
+            df['is_backtracking'] = (df['difference'] < 0) & df['difference'].notnull()
+            print(df[['sequence_global', 'UnitNumber', 'difference', 'is_backtracking']].head(20))
 
-        # 折れ線グラフを作成
-        fig = px.line(
-            df,
-            x='sequence',
-            y='UnitNumber',
-            color='UnitType',  # ユニットタイプごとに色分け
-            markers=True,  # データ点を表示
-            hover_data=['timeStamp', 'classId', 'objectId', 'ID'],  # ホバー時の詳細情報
-            title=f"学習履歴順序（折れ線グラフ） - 年度: {selected_year}, クラス: {selected_class or '全体'}",
-            labels={'sequence': '学習順序', 'UnitNumber': 'ユニット番号'}
-        )
 
-        # レイアウトの調整
+            # 区間ごとのフラグを設定
+            df['segment'] = (df['is_backtracking'] != df['is_backtracking'].shift()).cumsum()
+
+            # プロットの準備
+            fig = go.Figure()
+
+            # UnitNumber の連続を区切るセグメントを生成
+            if 'UnitNumber' in df.columns:
+                df['new_segment'] = (df['UnitNumber'] != df['UnitNumber'].shift()).cumsum()
+            else:
+                raise ValueError("UnitNumber カラムがデータフレームに存在しません。")
+
+            # セグメントの最初と最後の行を取得
+            first_last_indices = (
+                df.groupby('new_segment').apply(lambda g: [g.index[0], g.index[-1]])
+                .explode()
+                .unique()
+            )
+
+            # 行き戻り区間を赤線で描画
+            for segment, segment_data in df.groupby('segment'):
+                if segment_data['is_backtracking'].iloc[0]:  # 行き戻り区間
+                    fig.add_trace(
+                        go.Scatter(
+                            x=segment_data[x_axis],
+                            y=segment_data['UnitNumber'],
+                            mode='lines+markers',
+                            name='行き戻り',
+                            line=dict(color='red', width=2, dash='dash'),  # 赤の破線
+                            marker=dict(
+                                size=8,
+                                color=[
+                                    'red' if idx in first_last_indices else 'rgba(0,0,0,0)'
+                                    for idx in segment_data.index
+                                ],  # 最初と最後だけ点を描画
+                                symbol='circle'
+                            ),
+                            legendgroup='行き戻り',
+                            showlegend=segment == 1  # 最初のセグメントだけ凡例を表示
+                        )
+                    )
+
+            # 通常区間を青線で描画
+            for segment, segment_data in df.groupby('segment'):
+                if not segment_data['is_backtracking'].iloc[0]:  # 通常区間
+                    fig.add_trace(
+                        go.Scatter(
+                            x=segment_data[x_axis],
+                            y=segment_data['UnitNumber'],
+                            mode='lines+markers',
+                            name='通常',
+                            line=dict(color='blue', width=2),
+                            marker=dict(
+                                size=8,
+                                color=[
+                                    'blue' if idx in first_last_indices else 'rgba(0,0,0,0)'
+                                    for idx in segment_data.index
+                                ],  # 最初と最後だけ点を描画
+                                symbol='circle'
+                            ),
+                            legendgroup='通常',
+                            showlegend=segment == 1  # 最初のセグメントだけ凡例を表示
+                        )
+                    )
+
+
+
+
+
+        else:
+            # 形式別順序を使用（従来の処理）
+            df = pd.DataFrame(sorted(filtered_data, key=lambda x: x['sequence_activity']))
+            x_axis = 'sequence_activity'
+            title = f"形式別の学習履歴順序 - 年度: {selected_year}, クラス: {selected_class or '全体'}"
+            
+            fig = px.line(
+                df,
+                x=x_axis,
+                y='UnitNumber',
+                color='ActivityType',
+                markers=True,
+                hover_data=['timeStamp', 'classId', 'ActivityType'],
+                title=title,
+                labels={
+                    'sequence_global': '全体順序',
+                    'sequence_activity': '形式別順序',
+                    'UnitNumber': 'ユニット番号'
+                }
+            )
+
+        # グラフのレイアウトを調整
         fig.update_layout(
             xaxis_title="学習順序 (順番)",
             yaxis_title="ユニット番号",
-            xaxis=dict(
-                showgrid=True,
-                tickmode="linear",  # 連続的な軸を使用
-                dtick=int(len(df['sequence']) / 6)  # x軸のラベルを6段階に間引く
-            ),
-            yaxis=dict(
-                showgrid=True,
-                dtick=1
-            ),
             height=600,
             plot_bgcolor="rgba(240, 240, 240, 0.95)",
-            legend_title_text="ユニットタイプ"
-        )
-
-        # 折れ線とマーカーのスタイルを調整
-        fig.update_traces(
-            line=dict(width=2),
-            marker=dict(size=8, opacity=0.8)
+            legend_title_text="区分"
         )
 
         return fig
+
+
+
+
+
+
+
+
+
 
 
 
