@@ -314,6 +314,15 @@ app.layout = html.Div([
                     value='全体',  # デフォルトで全体順序を選択
                     inline=True,  # 横並びに表示
                     labelStyle={'margin-right': '10px'}
+                ),
+                dcc.RadioItems(
+                    id='toggle-backtracking',
+                    options=[
+                        {'label': '復習の表示', 'value': 'show'},
+                        {'label': '復習を非表示', 'value': 'hide'}
+                    ],
+                    value='hide',  # デフォルトは非表示
+                    inline=True
                 )
             ]),
 

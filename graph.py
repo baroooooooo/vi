@@ -476,11 +476,11 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         directions = []
         previous_unit_number = None
         for data in filtered_data:
-            current_unit_number = int(data.get('UnitNumber', 0))
+            current_unit_number = int(data.get('UnitNumber', 0))  # 現在のUnitNumber
             if previous_unit_number is None:
-                directions.append('Forward')
+                directions.append('Forward')  # 初回は常に進行
             else:
-                directions.append('Forward' if current_unit_number >= previous_unit_number else 'Review')
+                directions.append('Review' if current_unit_number < previous_unit_number else 'Forward')
             previous_unit_number = current_unit_number
         return directions
 
@@ -489,52 +489,60 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         if not attendance_numbers:
             return go.Figure()
 
+        # フィルタリングしたデータ
         filtered_data = filter_data(attendance_numbers, selected_year, unit_type, selected_month, selected_day)
         if not filtered_data:
             return go.Figure()
-        
-        # 横軸の範囲を計算
+
+        # データを日付順にソート
+        filtered_data = sorted(filtered_data, key=lambda x: x['timeStamp'])
+
+        # 横軸の範囲を設定
         if selected_month:
-            # 選択された月の1日からその月の最終日まで
             start_date = datetime(int(selected_year), int(selected_month), 1)
             _, last_day = calendar.monthrange(int(selected_year), int(selected_month))
             end_date = datetime(int(selected_year), int(selected_month), last_day)
         else:
-            # デフォルトでは4月から翌年2月に設定
             start_date = datetime(int(selected_year), 4, 1)
             end_date = datetime(int(selected_year) + 1, 2, 28)
             if (int(selected_year) + 1) % 4 == 0 and ((int(selected_year) + 1) % 100 != 0 or (int(selected_year) + 1) % 400 == 0):
                 end_date = datetime(int(selected_year) + 1, 2, 29)
 
+        # サンプリングで負荷軽減（最大点数を1000点に制限）
+        def downsample_data(data, max_points=1000):
+            if len(data) <= max_points:
+                return data
+            indices = np.linspace(0, len(data) - 1, max_points, dtype=int)
+            return [data[i] for i in indices]
+
+        filtered_data = downsample_data(filtered_data)
+
+        # データの準備
+        x_vals = [data['timeStamp'] for data in filtered_data]
+        y_vals = [int(data.get('UnitNumber', 0)) for data in filtered_data]
+        directions = calculate_direction(filtered_data)
+
+        # グラフ生成
         fig = go.Figure()
-        point_count = 0  # プロットされた点の数をカウントする変数
 
-        for attendance_number in attendance_numbers:
-            filtered_attendance_data = [data for data in filtered_data if str(data['ID']) == attendance_number]
-            if not filtered_attendance_data:
-                continue
+        # 復習と進行を個別にプロット
+        for i in range(1, len(x_vals)):
+            is_forward = directions[i] == 'Forward'
+            fig.add_trace(go.Scatter(
+                x=x_vals[i - 1:i + 1],
+                y=y_vals[i - 1:i + 1],
+                mode='lines',  # 点を最小化して線のみ描画
+                line=dict(color='blue' if is_forward else 'red', width=2, dash='solid' if is_forward else 'dash'),
+                showlegend=False  # 凡例は一回だけ表示
+            ))
 
-            x_vals = [data['timeStamp'] for data in filtered_attendance_data]
-            y_vals = [int(data.get('UnitNumber', 0)) for data in filtered_attendance_data]
-            directions = [data.get('direction', 'Forward') for data in filtered_attendance_data]
-
-            for i in range(1, len(x_vals)):
-                fig.add_trace(go.Scatter(
-                    x=x_vals[i-1:i+1],
-                    y=y_vals[i-1:i+1],
-                    mode='lines+markers',
-                    line=dict(color='blue' if directions[i] == 'Forward' else 'red', width=2),
-                    marker=dict(symbol='triangle-up' if directions[i] == 'Forward' else 'triangle-down', size=8),
-                    hovertemplate="%{x|%B %d, %H:%M}<br>Unit番号: %{y}<extra></extra>"
-                ))
-                point_count += 1  # 点をカウント
-
+        # レイアウト設定
         fig.update_layout(
             title={'text': f'ID {attendance_numbers} の時系列データ', 'font': {'size': 25}},
             xaxis_title={'text': '日付', 'font': {'size': 25}},
             yaxis_title={'text': 'Unit番号', 'font': {'size': 25}},
             xaxis=dict(
-                range=[start_date, end_date],  # 選択された月の範囲またはデフォルト範囲
+                range=[start_date, end_date],
                 tickformat='%d' if selected_month else '%b %Y',
                 tickfont={'size': 20}
             ),
@@ -542,22 +550,29 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             height=400
         )
 
-        # 日付が指定されている場合、その日付の時間範囲を強調
+        # 特定の日付の範囲を強調
         if selected_year and selected_month and selected_day:
             selected_date = datetime(int(selected_year), int(selected_month), int(selected_day))
             fig.update_xaxes(
-                range=[selected_date.replace(hour=0, minute=0, second=0),
-                    selected_date.replace(hour=23, minute=59, second=59)],
+                range=[
+                    selected_date.replace(hour=0, minute=0, second=0),
+                    selected_date.replace(hour=23, minute=59, second=59)
+                ],
                 tickformat="%H:%M"
             )
 
         return fig
+
+
+
     
     @app.callback(
         Output('ordered-learning-line-graph', 'figure'),
         [
-            Input('parameter-graph', 'clickData'),  # メイングラフでクリックしたデータ
-            Input('order-radio', 'value')  # ラジオボタンから全体 or 形式別を取得
+            Input('parameter-graph', 'clickData'),
+            Input('order-radio', 'value'),  # 全体順序 or 形式別順序
+            Input('toggle-backtracking', 'value'),  # 行き戻りの表示切り替え
+            Input('activity-type-dropdown', 'value')  # 選択されたアクティビティタイプ
         ],
         [
             State('year-dropdown', 'value'),
@@ -565,7 +580,7 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             State('toggle-outliers', 'n_clicks')
         ]
     )
-    def update_ordered_learning_line_graph(click_data, order_selection, selected_year, selected_class, toggle_outliers):
+    def update_ordered_learning_line_graph(click_data, order_selection, toggle_backtracking, selected_activity, selected_year, selected_class, toggle_outliers):
         if not click_data or not all_extracted_data:
             return {'data': [], 'layout': {'title': 'No data available'}}
 
@@ -583,114 +598,81 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         if not filtered_data:
             return {'data': [], 'layout': {'title': 'No data available'}}
 
-        # 全体順序を使用
+        # データフレーム生成
+        df = pd.DataFrame(filtered_data)
+
         if order_selection == '全体':
-            df = pd.DataFrame(sorted(filtered_data, key=lambda x: x['sequence_global']))
+            # 全体順序を使用してソート（アクティビティタイプを無視）
+            df = df.sort_values(by='sequence_global')
             x_axis = 'sequence_global'
             title = f"全体の学習履歴順序 - 年度: {selected_year}, クラス: {selected_class or '全体'}"
-            
-            # UnitNumber を数値型に変換
-            df['UnitNumber'] = pd.to_numeric(df['UnitNumber'], errors='coerce')
-            df = df.dropna(subset=['UnitNumber'])
 
-            # 差分を計算
-            df['difference'] = df['UnitNumber'].diff()
-            df['is_backtracking'] = (df['difference'] < 0) & df['difference'].notnull()
-            print(df[['sequence_global', 'UnitNumber', 'difference', 'is_backtracking']].head(20))
-
-
-            # 区間ごとのフラグを設定
-            df['segment'] = (df['is_backtracking'] != df['is_backtracking'].shift()).cumsum()
-
-            # プロットの準備
-            fig = go.Figure()
-
-            # UnitNumber の連続を区切るセグメントを生成
-            if 'UnitNumber' in df.columns:
-                df['new_segment'] = (df['UnitNumber'] != df['UnitNumber'].shift()).cumsum()
-            else:
-                raise ValueError("UnitNumber カラムがデータフレームに存在しません。")
-
-            # セグメントの最初と最後の行を取得
-            first_last_indices = (
-                df.groupby('new_segment').apply(lambda g: [g.index[0], g.index[-1]])
-                .explode()
-                .unique()
+            # 全体順序では単色で描画
+            fig = go.Figure(
+                go.Scatter(
+                    x=df[x_axis],
+                    y=df['UnitNumber'],
+                    mode='lines+markers',
+                    name='通常',
+                    line=dict(color='blue', width=2),
+                    marker=dict(size=8, color='blue')
+                )
             )
-
-            # 行き戻り区間を赤線で描画
-            for segment, segment_data in df.groupby('segment'):
-                if segment_data['is_backtracking'].iloc[0]:  # 行き戻り区間
-                    fig.add_trace(
-                        go.Scatter(
-                            x=segment_data[x_axis],
-                            y=segment_data['UnitNumber'],
-                            mode='lines+markers',
-                            name='行き戻り',
-                            line=dict(color='red', width=2, dash='dash'),  # 赤の破線
-                            marker=dict(
-                                size=8,
-                                color=[
-                                    'red' if idx in first_last_indices else 'rgba(0,0,0,0)'
-                                    for idx in segment_data.index
-                                ],  # 最初と最後だけ点を描画
-                                symbol='circle'
-                            ),
-                            legendgroup='行き戻り',
-                            showlegend=segment == 1  # 最初のセグメントだけ凡例を表示
-                        )
-                    )
-
-            # 通常区間を青線で描画
-            for segment, segment_data in df.groupby('segment'):
-                if not segment_data['is_backtracking'].iloc[0]:  # 通常区間
-                    fig.add_trace(
-                        go.Scatter(
-                            x=segment_data[x_axis],
-                            y=segment_data['UnitNumber'],
-                            mode='lines+markers',
-                            name='通常',
-                            line=dict(color='blue', width=2),
-                            marker=dict(
-                                size=8,
-                                color=[
-                                    'blue' if idx in first_last_indices else 'rgba(0,0,0,0)'
-                                    for idx in segment_data.index
-                                ],  # 最初と最後だけ点を描画
-                                symbol='circle'
-                            ),
-                            legendgroup='通常',
-                            showlegend=segment == 1  # 最初のセグメントだけ凡例を表示
-                        )
-                    )
-
-
-
-
 
         else:
-            # 形式別順序を使用（従来の処理）
-            df = pd.DataFrame(sorted(filtered_data, key=lambda x: x['sequence_activity']))
+            # 形式別順序を使用
             x_axis = 'sequence_activity'
             title = f"形式別の学習履歴順序 - 年度: {selected_year}, クラス: {selected_class or '全体'}"
-            
-            fig = px.line(
-                df,
-                x=x_axis,
-                y='UnitNumber',
-                color='ActivityType',
-                markers=True,
-                hover_data=['timeStamp', 'classId', 'ActivityType'],
-                title=title,
-                labels={
-                    'sequence_global': '全体順序',
-                    'sequence_activity': '形式別順序',
-                    'UnitNumber': 'ユニット番号'
-                }
-            )
 
-        # グラフのレイアウトを調整
+            if selected_activity:
+                # 選択されたアクティビティタイプのみ
+                df = df[df['ActivityType'] == selected_activity].sort_values(by=x_axis)
+            else:
+                # 全てのアクティビティタイプを含む場合
+                df = df.sort_values(by=['ActivityType', x_axis])
+
+            # 色分けのためのアクティビティタイプごとのグラフ追加
+            fig = go.Figure()
+            for activity_type, activity_group in df.groupby('ActivityType'):
+                fig.add_trace(
+                    go.Scatter(
+                        x=activity_group[x_axis],
+                        y=activity_group['UnitNumber'],
+                        mode='lines+markers',
+                        name=f"アクティビティタイプ: {activity_type}",
+                        line=dict(width=2),  # 色はPlotlyが自動割り当て
+                        marker=dict(size=8)
+                    )
+                )
+
+        # 行き戻りの判定
+        df['UnitNumber'] = pd.to_numeric(df['UnitNumber'], errors='coerce')
+        df = df.dropna(subset=['UnitNumber'])
+
+        if order_selection == '全体':
+            df['is_backtracking'] = df['UnitNumber'].diff() < 0
+        else:
+            df['is_backtracking'] = df.groupby('ActivityType')['UnitNumber'].diff() < 0
+
+        # 行き戻りの描画（全体順序でも形式別順序でも同様）
+        if toggle_backtracking == 'show':
+            for i in range(1, len(df)):
+                if df['is_backtracking'].iloc[i]:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[df[x_axis].iloc[i - 1], df[x_axis].iloc[i]],
+                            y=[df['UnitNumber'].iloc[i - 1], df['UnitNumber'].iloc[i]],
+                            mode='lines+markers',
+                            name='行き戻り',
+                            line=dict(color='red', width=2, dash='dash'),
+                            marker=dict(color='red', size=8),
+                            showlegend=False
+                        )
+                    )
+
+        # レイアウト設定
         fig.update_layout(
+            title=title,
             xaxis_title="学習順序 (順番)",
             yaxis_title="ユニット番号",
             height=600,
@@ -699,6 +681,8 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         )
 
         return fig
+
+
 
 
 
