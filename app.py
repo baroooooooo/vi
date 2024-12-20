@@ -60,6 +60,25 @@ app.layout = html.Div([
             ),
         ], style={'margin': '0 10px'}),  # 余白を調整
 
+        dcc.Dropdown(
+            id='category-dropdown',
+            options=[
+                {'label': 'MID', 'value': 'MID'},
+                {'label': 'LOW', 'value': 'LOW'},
+                {'label': 'HIGH', 'value': 'HIGH'}
+            ],
+            placeholder='Select Category',
+            style={
+                    'width': '200px',
+                    'font-size': '24px',
+                    'text-align': 'center',
+                    'display': 'inline-block',
+                    'vertical-align': 'middle',
+                    'border': '2px solid black',  # 枠線を太く、濃く設定
+                    'border-radius': '5px'  # 角を少し丸める（オプション）
+            }
+        ),
+
         html.Div([
             dcc.Dropdown(
                 id='class-dropdown',
@@ -253,6 +272,13 @@ app.layout = html.Div([
                 }
             }
         ),
+        dcc.Checklist(
+            id='toggle-average',
+            options=[{'label': '平均値を表示', 'value': 'show_average'}],
+            value=[],
+            inline=True,
+            style={'display': 'inline-block', 'margin': '10px'}
+        ),
     ]),
     html.Div([ 
             
@@ -273,7 +299,12 @@ app.layout = html.Div([
                     }
                 }
             ),
-            html.Button(id='reset-learning-order-button', n_clicks=0),
+            html.Button(
+                'Reset Learning Order',
+                id='reset-learning-order-button',
+                n_clicks=0,
+                style={'display': 'inline-block', 'margin': '10px', 'font-size': '16px'}
+            ),
             dcc.Graph(
                 id='ordered-learning-line-graph',
                 style={'height': '70vh', 'width': '95%', 'margin-top': '0px'},

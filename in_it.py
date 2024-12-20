@@ -114,22 +114,27 @@ def prepare_data(data_directory, result_data):
     return data_dict
 
 def prepare_and_collect_data(data_directory, result_data):
-    """
-    データディレクトリからデータを収集し、classId を含めて集計。
-    """
     data_dict = {}
     all_extracted_data = []
 
     print(f'Preparing data from directory: {data_directory}')  # デバッグ用メッセージ
 
     for root, dirs, files in os.walk(data_directory):
-        year = os.path.basename(root)  # ディレクトリ名から年を取得
+        # フォルダ構造から分類 (MID, LOW, HIGH) を取得
+        relative_path = os.path.relpath(root, data_directory)
+        parts = relative_path.split(os.sep)
+        folder_category = parts[0] if len(parts) > 1 else None
+        year = parts[1] if len(parts) > 1 else None
+
+        if not folder_category or not year:
+            continue  # フォルダ構造に合わない場合はスキップ
+
         for file in files:
             if file.endswith('.csv') and file != 'data_result.csv':  # 'data_result.csv'を除外
                 file_path = os.path.join(root, file)
                 attendance_number = os.path.splitext(file)[0]
 
-                print(f'Loading file: {file_path} for ID: {attendance_number}, Year: {year}')
+                print(f'Loading file: {file_path} for ID: {attendance_number}, Year: {year}, Category: {folder_category}')
 
                 # 出席番号のデータを読み込む
                 data = load_data(file_path)
@@ -142,10 +147,7 @@ def prepare_and_collect_data(data_directory, result_data):
                     # カウントを計算
                     counts_and_times = calculate_counts_and_times(data)
                     counts_and_times['test_result'] = test_result
-
-                    # classId を抽出してカウントデータに追加
-                    data['classId'] = data['extension'].apply(extract_class_id)
-                    counts_and_times['classId'] = data['classId'].mode().iloc[0] if not data['classId'].isnull().all() else None
+                    counts_and_times['category'] = folder_category  # カテゴリを追加
 
                     if year not in data_dict:
                         data_dict[year] = {}
@@ -154,11 +156,12 @@ def prepare_and_collect_data(data_directory, result_data):
                     # フィールドを抽出
                     extracted_data = extract_id_object_timestamp(data, year)
 
-                    # 各データに年、成績、クラスIDを追加
+                    # 各データにカテゴリ、年、成績、クラスIDを追加
                     for item in extracted_data:
                         item['Year'] = year
                         item['test_result'] = test_result
-                        item['classId'] = counts_and_times['classId']
+                        item['classId'] = counts_and_times.get('classId', None)
+                        item['category'] = folder_category
 
                     # リストに追加
                     all_extracted_data.extend(extracted_data)
@@ -166,6 +169,7 @@ def prepare_and_collect_data(data_directory, result_data):
                     print(f'No data found for attendance number {attendance_number} in {year}.')
 
     return data_dict, all_extracted_data
+
 
 def extract_class_id(extension_str):
     """
