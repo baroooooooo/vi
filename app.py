@@ -49,36 +49,27 @@ app.layout = html.Div([
                 value=years[0] if years else None,  # デフォルト値の設定
                 placeholder="年を選択してください",
                 style={
-                    'width': '200px',
+                    # 幅を広げる
+                    'width': '300px',
+
+                    # テキストを折り返さない
+                    'whiteSpace': 'nowrap',
+
                     'font-size': '24px',
                     'text-align': 'center',
+
+                    # ここから先はお好み
+                    'overflow': 'visible',       # はみ出し部分を隠す
+                    'textOverflow': 'ellipsis', # 折り返し代わりに "..." 表示
+                    'border': '2px solid black',
+                    'border-radius': '5px',
                     'display': 'inline-block',
-                    'vertical-align': 'middle',
-                    'border': '2px solid black',  # 枠線を太く、濃く設定
-                    'border-radius': '5px'  # 角を少し丸める（オプション）
+                    'vertical-align': 'middle'
                 }
             ),
         ], style={'margin': '0 10px'}),  # 余白を調整
 
-        dcc.Dropdown(
-            id='category-dropdown',
-            options=[
-                {'label': 'MID', 'value': 'MID'},
-                {'label': 'LOW', 'value': 'LOW'},
-                {'label': 'HIGH', 'value': 'HIGH'}
-            ],
-            placeholder='Select Category',
-            style={
-                    'width': '200px',
-                    'font-size': '24px',
-                    'text-align': 'center',
-                    'display': 'inline-block',
-                    'vertical-align': 'middle',
-                    'border': '2px solid black',  # 枠線を太く、濃く設定
-                    'border-radius': '5px'  # 角を少し丸める（オプション）
-            }
-        ),
-
+        
         html.Div([
             dcc.Dropdown(
                 id='class-dropdown',
@@ -87,13 +78,22 @@ app.layout = html.Div([
                 multi=True,
                 clearable=True,
                 style={
-                    'width': '200px',
+                    # 幅を広げる
+                    'width': '300px',
+
+                    # テキストを折り返さない
+                    'whiteSpace': 'nowrap',
+
                     'font-size': '24px',
                     'text-align': 'center',
+
+                    # ここから先はお好み
+                    'overflow': 'visible',       # はみ出し部分を隠す
+                    'textOverflow': 'ellipsis', # 折り返し代わりに "..." 表示
+                    'border': '2px solid black',
+                    'border-radius': '5px',
                     'display': 'inline-block',
-                    'vertical-align': 'middle',
-                    'border': '2px solid black',  # 枠線を太く、濃く設定
-                    'border-radius': '5px'  # 角を少し丸める（オプション）
+                    'vertical-align': 'middle'
                 }
             ),
         ],style={'margin': '0 10px'}),
@@ -121,13 +121,22 @@ app.layout = html.Div([
                 value='video_start_count',  # デフォルト値
                 placeholder="パラメータを選択してください",
                 style={
-                    'width': '200px',
+                    # 幅を広げる
+                    'width': '300px',
+
+                    # テキストを折り返さない
+                    'whiteSpace': 'nowrap',
+
                     'font-size': '24px',
                     'text-align': 'center',
+
+                    # ここから先はお好み
+                    'overflow': 'visible',       # はみ出し部分を隠す
+                    'textOverflow': 'ellipsis', # 折り返し代わりに "..." 表示
+                    'border': '2px solid black',
+                    'border-radius': '5px',
                     'display': 'inline-block',
-                    'vertical-align': 'middle',
-                    'border': '2px solid black',  # 枠線を太く、濃く設定
-                    'border-radius': '5px'  # 角を少し丸める（オプション）
+                    'vertical-align': 'middle'
                 }
             ),
         ], style={'margin': '0 10px'}),
@@ -155,14 +164,47 @@ app.layout = html.Div([
                 placeholder="追加パラメータを選択してください",
                 clearable=True,
                 style={
-                    'width': '200px',
+                    # 幅を広げる
+                    'width': '300px',
+
+                    # テキストを折り返さない
+                    'whiteSpace': 'nowrap',
+
                     'font-size': '24px',
-                    'vertical-align': 'middle',
-                    'border': '1px solid #ccc',  # 通常の枠線
-                    'border-radius': '4px',  # 標準的な角丸
+                    'text-align': 'center',
+
+                    # ここから先はお好み
+                    'overflow': 'visible',       # はみ出し部分を隠す
+                    'textOverflow': 'ellipsis', # 折り返し代わりに "..." 表示
+                    'border': '2px solid black',
+                    'border-radius': '5px',
+                    'display': 'inline-block',
+                    'vertical-align': 'middle'
                 }
             ),
         ], style={'margin': '0 10px'}),
+
+        
+
+        # 順序ボタン
+        html.Div([
+            html.Button('番号順', id='order-number', n_clicks=0),
+            html.Button('昇順', id='order-asc', n_clicks=0),
+            html.Button('降順', id='order-desc', n_clicks=0)
+        ], style={'margin': '0 10px'}),
+
+    ], style={'display': 'flex', 'flex-wrap': 'wrap', 'justify-content': 'center', 'align-items': 'center', 'gap': '10px', 'padding': '10px'}),  # レイアウトを一列に並べるためのスタイル
+
+    
+    html.Div([
+
+        
+        dcc.Graph(
+            id='parameter-graph',
+            figure={'data': [], 'layout': {'title': 'グラフがありません'}},
+            config={'displayModeBar': True, 'displaylogo': False},
+            style={'cursor': 'pointer', 'height': '340px', 'width': '100%', 'margin-bottom': '40px'}
+        ),
 
         # X軸選択のドロップダウン
         html.Div([
@@ -184,16 +226,25 @@ app.layout = html.Div([
                     {'label': '復習回数', 'value': 'continue_count'},
                     {'label': '成績', 'value': 'test_result'}
                 ],
-                value=None,  # デフォルト値
+                value=None,
                 placeholder="X軸パラメータを選択してください",
                 style={
-                    'width': '200px',
+                    # 幅を広げる
+                    'width': '300px',
+
+                    # テキストを折り返さない
+                    'whiteSpace': 'nowrap',
+
                     'font-size': '24px',
                     'text-align': 'center',
+
+                    # ここから先はお好み
+                    'overflow': 'visible',       # はみ出し部分を隠す
+                    'textOverflow': 'ellipsis', # 折り返し代わりに "..." 表示
+                    'border': '2px solid black',
+                    'border-radius': '5px',
                     'display': 'inline-block',
-                    'vertical-align': 'middle',
-                    'border': '2px solid black',  # 枠線を太く、濃く設定
-                    'border-radius': '5px'  # 角を少し丸める（オプション）
+                    'vertical-align': 'middle'
                 }
             ),
         ], style={'margin': '0 10px'}),
@@ -218,37 +269,28 @@ app.layout = html.Div([
                     {'label': '復習回数', 'value': 'continue_count'},
                     {'label': '成績', 'value': 'test_result'}
                 ],
-                value=None,  # デフォルト値
+                value=None,
                 placeholder="Y軸パラメータを選択してください",
                 style={
-                    'width': '200px',
+                    # 幅を広げる
+                    'width': '300px',
+
+                    # テキストを折り返さない
+                    'whiteSpace': 'nowrap',
+
                     'font-size': '24px',
                     'text-align': 'center',
+
+                    # ここから先はお好み
+                    'overflow': 'visible',       # はみ出し部分を隠す
+                    'textOverflow': 'ellipsis', # 折り返し代わりに "..." 表示
+                    'border': '2px solid black',
+                    'border-radius': '5px',
                     'display': 'inline-block',
-                    'vertical-align': 'middle',
-                    'border': '2px solid black',  # 枠線を太く、濃く設定
-                    'border-radius': '5px'  # 角を少し丸める（オプション）
+                    'vertical-align': 'middle'
                 }
             ),
         ], style={'margin': '0 10px'}),
-
-        # 順序ボタン
-        html.Div([
-            html.Button('番号順', id='order-number', n_clicks=0),
-            html.Button('昇順', id='order-asc', n_clicks=0),
-            html.Button('降順', id='order-desc', n_clicks=0)
-        ], style={'margin': '0 10px'}),
-
-    ], style={'display': 'flex', 'flex-wrap': 'wrap', 'justify-content': 'center', 'align-items': 'center', 'gap': '10px', 'padding': '10px'}),  # レイアウトを一列に並べるためのスタイル
-
-    
-    html.Div([
-        dcc.Graph(
-            id='parameter-graph',
-            figure={'data': [], 'layout': {'title': 'グラフがありません'}},
-            config={'displayModeBar': True, 'displaylogo': False},
-            style={'cursor': 'pointer', 'height': '340px', 'width': '100%', 'margin-bottom': '40px'}
-        ),
 
         dcc.Graph(id='popup-graph', style={'height': '45vh', 'width': '100%', 'margin-top': '40px'}),  # コンパクトに高さ調整
     ], style={'padding': '0', 'margin': '0', 'display': 'flex', 'flex-direction': 'column', 'align-items': 'center'}),
@@ -258,30 +300,47 @@ app.layout = html.Div([
         html.Button('Reset Radar Chart', id='reset-radar-button', n_clicks=0, style={'margin-bottom': '1px'}),  # ボタンの余白をさらに小さく
         dcc.Graph(
             id='radar-chart',
-            style={'height': '50vh', 'width': '95%', 'margin-bottom': '0px', 'display': 'flex', 'justify-content': 'center', 'align-items': 'center'},
-            config={'displayModeBar': False},
             figure={
-                'layout': {
-                    'margin': {'l': 0, 'r': 0, 'b': 0, 't': 50},  # marginを最小化
-                    'height': 600,
-                    'autosize': False,
-                    'polar': {
-                        'radialaxis': {'visible': True, 'range': [0, 1]},
-                        'domain': {'x': [0.1, 0.9], 'y': [0.1, 0.9]}  # グラフの領域を中央に調整
+                'data': [   # トレースを配列で定義
+                    {
+                        'type': 'scatterpolar',
+                        'r': [0.2, 0.6, 0.8, 0.4],
+                        'theta': ['A', 'B', 'C', 'D'],
+                        'fill': 'toself',
+                        'name': 'Radar'
                     }
+                ],
+                'layout': {  # レイアウト設定を辞書形式で書く
+                    'title': 'レーダーチャート',
+                    'polar': {
+                        'radialaxis': {
+                            'visible': True,
+                            'range': [0, 1]
+                        },
+                        'domain': {'x': [0.1, 0.9], 'y': [0.1, 0.9]}
+                    },
+                    'margin': {'l': 0, 'r': 0, 'b': 0, 't': 50},
+                    'height': 600,
+                    'autosize': False
                 }
-            }
+            },
+            config={'displayModeBar': False},
+            style={
+                'display': 'block',
+                'margin': '0 auto',
+                'width': '600px',
+                'height': '600px',
+            },
         ),
-        dcc.Checklist(
-            id='toggle-average',
-            options=[{'label': '平均値を表示', 'value': 'show_average'}],
-            value=[],
-            inline=True,
-            style={'display': 'inline-block', 'margin': '10px'}
+        html.Button(
+            "平均値の表示切替", 
+            id='toggle-average-button', 
+            n_clicks=0, 
+            style={'margin': '10px', 'padding': '10px', 'fontSize': '16px'}
         ),
+        dcc.Store(id='toggle-average-store', data={'show_average': False})  # 初期値を False に設定
     ]),
-    html.Div([ 
-            
+    html.Div([             
             dcc.Dropdown(id='unit-type-selector', options=[{'label': ut, 'value': ut} for ut in df['UnitType'].unique()], placeholder="Select Unit Type"),
             dcc.Dropdown(id='month-dropdown', options=[{'label': f'{month}月', 'value': month} for month in sorted(df['timeStamp'].dt.month.unique())], placeholder="Select a month"),
             dcc.Dropdown(id='day-dropdown', placeholder="Select a day"),
@@ -322,10 +381,10 @@ app.layout = html.Div([
                 dcc.Dropdown(
                     id='activity-type-dropdown',
                     options=[
-                        {'label': 'Grammar', 'value': 'grammar'},
-                        {'label': 'Pronunciation', 'value': 'pronunciation'},
-                        {'label': 'Speaking', 'value': 'speaking'},
-                        {'label': 'Listening', 'value': 'listening'}
+                        {'label': '文法', 'value': 'grammar'},
+                        {'label': '発音', 'value': 'pronunciation'},
+                        {'label': 'スピーキング', 'value': 'speaking'},
+                        {'label': 'リスニング', 'value': 'listening'}
                     ],
                     value=None,  # デフォルトで選択なし
                     placeholder="アクティビティタイプを選択してください",

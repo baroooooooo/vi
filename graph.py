@@ -30,37 +30,27 @@ def register_callbacks(app, calculated_results, all_extracted_data):
     @app.callback(
         Output('parameter-graph', 'figure'),
         Output('graph-data', 'data'),
-        Input('folder-dropdown', 'value'),  # フォルダ選択ドロップダウン
         Input('year-dropdown', 'value'),
         Input('class-dropdown', 'value'),
         Input('parameter-dropdown', 'value'),
-        Input('extra-parameter-dropdown', 'value'),
+        Input('extra-parameter-dropdown', 'value'),  # ドロップダウンがリセット可能
         Input('order-number', 'n_clicks'),
         Input('order-asc', 'n_clicks'),
         Input('order-desc', 'n_clicks'),
         Input('toggle-outliers', 'n_clicks'),
-        Input('normalize-toggle', 'value')
+        Input('normalize-toggle', 'value')  # 正規化トグルボタン
     )
     def update_bar_graph(
         selected_year, selected_classes, selected_parameter, selected_extra_parameter,
-        order_number, order_asc, order_desc, toggle_outliers, normalize_toggle, selected_category
+        order_number, order_asc, order_desc, toggle_outliers, normalize_toggle
     ):
-        # データがない場合の早期リターン
         if not calculated_results or not selected_year or not selected_parameter:
             return {'data': [], 'layout': {'title': 'No data available'}}, None
 
-        # 年度データを取得
+        # データを取得
         year_data = calculated_results.get(selected_year, {})
 
-        # フォルダカテゴリでフィルタリング
-        if selected_category:
-            year_data = {
-                attendance_number: data
-                for attendance_number, data in year_data.items()
-                if data.get('category') == selected_category
-            }
-
-        # クラスでフィルタリング
+        # クラスでフィルタリング（クラスが未選択の場合は全体を表示）
         if selected_classes:
             if not isinstance(selected_classes, (list, set)):
                 selected_classes = [selected_classes]
@@ -72,7 +62,6 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         else:
             filtered_data = year_data
 
-        # フィルタリング後のデータがない場合の処理
         if not filtered_data:
             return {'data': [], 'layout': {'title': 'No data available'}}, None
 
@@ -101,7 +90,6 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         y_values_original = [x[1] for x in attendance_data]
         y_values_extra = [x[2] for x in attendance_data] if selected_extra_parameter else None
 
-        # 抽出後のデータがない場合の処理
         if not attendance_numbers:
             return {'data': [], 'layout': {'title': 'No data available'}}, None
 
@@ -115,7 +103,7 @@ def register_callbacks(app, calculated_results, all_extracted_data):
                 max_extra_value = max(y_values_extra) if y_values_extra else 1
                 y_values_extra = [value / max_extra_value for value in y_values_extra]
 
-        # パラメータラベルの設定
+        # ラベル
         parameter_labels = {
             'video_start_count': '動画再生回数',
             'audio_start_count': '音声再生回数',
@@ -135,7 +123,7 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         selected_param_label = parameter_labels.get(selected_parameter, selected_parameter)
         extra_param_label = parameter_labels.get(selected_extra_parameter, selected_extra_parameter) if selected_extra_parameter else None
 
-        # グラフデータ作成
+        # グラフデータ
         original_data = go.Bar(
             x=attendance_numbers,
             y=y_values_original,
@@ -162,7 +150,6 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             )
             data.append(extra_data_trace)
 
-        # グラフのレイアウト設定
         layout = {
             'title': f'{selected_param_label} ({selected_year})' + (f' と {extra_param_label}' if selected_extra_parameter else ''),
             'xaxis': {'title': '出席番号', 'type': 'category'},
@@ -284,28 +271,52 @@ def register_callbacks(app, calculated_results, all_extracted_data):
                 return {}  # データが無い場合の処理
         else:
             return {}
+        
+    @app.callback(
+        Output('toggle-average-store', 'data'),
+        [Input('toggle-average-button', 'n_clicks')],
+        [State('toggle-average-store', 'data')]
+    )
+    def update_toggle_average(n_clicks, current_data):
+        if n_clicks is None:
+            return current_data
+        current_data['show_average'] = not current_data['show_average']
+        return current_data
 
 
 
 
-
+    # レーダーチャートを更新
     @app.callback(
         Output('radar-chart', 'figure'),
         [
-            Input('parameter-graph', 'clickData'),  # メイングラフ
+            Input('parameter-graph', 'clickData'),
             Input('year-dropdown', 'value'),
             Input('reset-radar-button', 'n_clicks'),
-            Input('toggle-average', 'value'),
-            Input('parameter-graph', 'figure')  # 棒グラフ全体のデータを取得
+            Input('toggle-average-store', 'data'),  # トグル状態を取得
+            Input('parameter-graph', 'figure')
         ]
     )
     def display_radar_chart(parameter_graph_clickData, selected_year, reset_n_clicks, toggle_average, parameter_graph_figure):
         global selected_attendance_numbers
-        print(f"Main graph click data: {parameter_graph_clickData}")
-        print(f"Selected year: {selected_year}")
-        print(f"Selected attendance numbers: {selected_attendance_numbers}")
-        print(f"parameter_graph_figure: {parameter_graph_figure}")
-        print(f"type(parameter_graph_figure): {type(parameter_graph_figure)}")
+
+        # ステータス名の日本語マッピング
+        status_mapping = {
+            'video_start_count': '動画開始回数',
+            'audio_start_count': '音声開始回数',
+            'answer_count': '回答回数',
+            'correct_answers': '正解数',
+            'incorrect_answers': '不正解数',
+            'suspended_count': '中断回数',
+            'launched_count': '起動回数',
+            'total_answer_time': '回答時間',
+            'recording_time': '録音時間',
+            'video_time': '動画時間',
+            'recorder_start_count': '録音開始回数',
+            'movie_completed_count': '動画完了回数',
+            'continue_count': '継続回数',
+            'test_result': 'テスト結果'
+        }
 
         # 棒グラフのデータ構造を確認し取得
         attendance_numbers_in_bar = []
@@ -319,51 +330,63 @@ def register_callbacks(app, calculated_results, all_extracted_data):
 
         # リセットボタンが押された場合
         if reset_n_clicks and dash.callback_context.triggered_id == 'reset-radar-button':
-            print("Reset button clicked")
             selected_attendance_numbers = []  # 選択された出席番号をリセット
-            return generate_radar_chart([], selected_year, attendance_numbers_in_bar, show_average=False)
+            return generate_radar_chart([], selected_year, attendance_numbers_in_bar, status_mapping, show_average=False)
 
-        attendance_number = None
         # メイングラフのクリックデータを取得
+        attendance_number = None
         if parameter_graph_clickData and 'points' in parameter_graph_clickData:
             attendance_number = parameter_graph_clickData['points'][0]['label']
-            print(f"Selected attendance number from main graph: {attendance_number}")
-
-        # どちらもクリックされていない場合、更新しない
-        if not attendance_number:
-            return dash.no_update
 
         # 出席番号が取得できた場合、リストに追加
-        if attendance_number not in selected_attendance_numbers:
+        if attendance_number and attendance_number not in selected_attendance_numbers:
             selected_attendance_numbers.append(attendance_number)
 
         # トグルボタンの状態を取得
-        show_average = 'show_average' in toggle_average
-        return generate_radar_chart(selected_attendance_numbers, selected_year, attendance_numbers_in_bar, show_average)
+        show_average = toggle_average['show_average']
+        return generate_radar_chart(selected_attendance_numbers, selected_year, attendance_numbers_in_bar, status_mapping, show_average)
 
-
-
-    def generate_radar_chart(selected_attendance_numbers, selected_year, attendance_numbers_in_bar, show_average):
-        print(f"Generating radar chart for: {selected_attendance_numbers} in year {selected_year}")
+    # レーダーチャート生成
+    def generate_radar_chart(selected_attendance_numbers, selected_year, attendance_numbers_in_bar, status_mapping, show_average):
         if not selected_attendance_numbers:
             return {'data': [], 'layout': go.Layout(title='レーダーチャート')}
 
         radar_traces = []
-        overall_data = []
 
         # 最大値の計算 (全IDのデータ)
         overall_max_values = {
             key: max(
                 d.get(key, 0) for d in calculated_results.get(selected_year, {}).values()
             )
-            for key in [
-                'video_start_count', 'audio_start_count', 'answer_count',
-                'correct_answers', 'incorrect_answers', 'suspended_count',
-                'launched_count', 'total_answer_time', 'recording_time',
-                'video_time', 'recorder_start_count', 'movie_completed_count',
-                'continue_count', 'test_result'
-            ]
+            for key in status_mapping.keys()
         }
+
+        # `attendance_numbers_in_bar`のデータを辞書型に変換
+        # `attendance_numbers_in_bar`がリスト形式で`calculated_results`のキーを持つ場合を想定
+        attendance_numbers_in_bar_data = [
+            calculated_results[selected_year].get(id_number, {}) for id_number in attendance_numbers_in_bar
+            if id_number in calculated_results[selected_year]
+        ]
+
+        # 棒グラフ全体の平均値を計算
+        if show_average and attendance_numbers_in_bar_data:
+            average_data = {
+                key: sum(d.get(key, 0) for d in attendance_numbers_in_bar_data) / len(attendance_numbers_in_bar_data)
+                for key in overall_max_values
+            }
+
+            normalized_average_values = [
+                average_data[key] / overall_max_values[key] if overall_max_values[key] > 0 else 0
+                for key in overall_max_values
+            ]
+
+            radar_traces.append(go.Scatterpolar(
+                r=normalized_average_values + [normalized_average_values[0]],
+                theta=[status_mapping[k] for k in overall_max_values.keys()] + [status_mapping[list(overall_max_values.keys())[0]]],
+                name='棒グラフ全体の平均値',
+                fill='toself',
+                line=dict(dash='dash')
+            ))
 
         # 個別データのレーダーチャート追加
         for attendance_number in selected_attendance_numbers:
@@ -371,63 +394,59 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             if not data:
                 continue
 
-            overall_data.append(data)  # 平均値計算のために全データを保存
-
             normalized_values = [
                 data.get(key, 0) / overall_max_values[key] if overall_max_values[key] > 0 else 0
                 for key in overall_max_values
             ]
 
             radar_traces.append(go.Scatterpolar(
-                r=normalized_values + [normalized_values[0]],  # 閉じた図形にするために最初の値を追加
-                theta=list(overall_max_values.keys()) + [list(overall_max_values.keys())[0]],  # ラベルをリスト化
+                r=normalized_values + [normalized_values[0]],  # 閉じた形にするため最初の値を追加
+                theta=[status_mapping[k] for k in overall_max_values.keys()] + [status_mapping[list(overall_max_values.keys())[0]]],
                 name=f'ID{attendance_number}の個人データ',
                 fill='toself'
             ))
 
-        # 棒グラフ全体の平均値を計算
-        if show_average:
-            bar_data = [
-                calculated_results[selected_year][id_number]
-                for id_number in attendance_numbers_in_bar
-                if id_number in calculated_results[selected_year]
-            ]
-
-            average_data = {
-                key: sum(d.get(key, 0) for d in bar_data) / len(bar_data)
-                for key in overall_max_values
-            }
-
-            # 平均値を正規化
-            normalized_average_values = [
-                average_data[key] / overall_max_values[key] if overall_max_values[key] > 0 else 0
-                for key in overall_max_values
-            ]
-
-            radar_traces.append(go.Scatterpolar(
-                r=normalized_average_values + [normalized_average_values[0]],  # 閉じた図形にするために最初の値を追加
-                theta=list(overall_max_values.keys()) + [list(overall_max_values.keys())[0]],  # ラベルをリスト化
-                name='棒グラフ全体の平均値',
-                fill='toself',
-                line=dict(dash='dash')  # 平均値の線を破線で表示
-            ))
-
         return {
             'data': radar_traces,
-            'layout': go.Layout(
-                title='レーダーチャート',
-                polar={
-                    'radialaxis': {'visible': True, 'range': [0, 1], 'tickfont': {'size': 14}},
-                    'angularaxis': {'tickfont': {'size': 24}}
+            'layout' : go.Layout(
+                title={
+                    'text': 'レーダーチャート',
+                    'x': 0.5,
+                    'y': 0.95,
+                    'font': {'size': 20}
                 },
-                showlegend=True,
-                legend={'x': 0.65, 'y': 1, 'xanchor': 'left', 'font': {'size': 22}},
+                polar={
+                    'radialaxis': {
+                        'visible': True,
+                        'range': [0, 1],
+                        'tickfont': {'size': 12}
+                    },
+                    'angularaxis': {
+                        'tickfont': {'size': 12}
+                    },
+                    'domain': {
+                    # グラフ描画領域を少し内側にとり、中心付近に集める
+                    'x': [0.05, 0.95],
+                    'y': [0.05, 0.95]
+                }
+                },
+                margin={'l': 80, 'r': 80, 't': 100, 'b': 100},
                 autosize=True,
-                margin={'l': 50, 'r': 50, 'b': 50, 't': 75},
-                height=500
+                height=600,
+                width=600,
+                showlegend=True,
+                legend={
+                    'x': 0.8,
+                    'y': 0.9,
+                    'xanchor': 'center',
+                    'yanchor': 'top',
+                    'font': {'size': 12}
+                }
             )
-        }
 
+
+
+        }
     
 # UnitType選択に応じて月の選択肢を更新
     @app.callback(
@@ -562,13 +581,22 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         for i in range(1, len(x_vals)):
             is_forward = directions[i] == 'Forward'
             fig.add_trace(go.Scatter(
-                x=x_vals[i - 1:i + 1],
-                y=y_vals[i - 1:i + 1],
-                mode='lines',  # 点を最小化して線のみ描画
-                line=dict(color='blue' if is_forward else 'red', width=2, dash='solid' if is_forward else 'dash'),
-                showlegend=False  # 凡例は一回だけ表示
+                x=[x_vals[i - 1], x_vals[i]],
+                y=[y_vals[i - 1], y_vals[i]],
+                mode='lines+markers',
+                line=dict(
+                    color='blue' if is_forward else 'red',
+                    width=2,
+                    dash='solid' if is_forward else 'dash'
+                ),
+                marker=dict(
+                    size=8,
+                    color='blue' if is_forward else 'red'
+                ),
+                name='進行' if is_forward else '復習',
+                legendgroup='進行' if is_forward else '復習',  # 凡例をグループ化
+                showlegend=i == 1 or (directions[i - 1] != directions[i])  # 最初だけ表示
             ))
-
         # レイアウト設定
         fig.update_layout(
             title={'text': f'ID {attendance_numbers} の時系列データ', 'font': {'size': 25}},
@@ -580,25 +608,23 @@ def register_callbacks(app, calculated_results, all_extracted_data):
                 tickfont={'size': 20}
             ),
             yaxis=dict(dtick=1, tickfont={'size': 20}),
-            height=400
+            height=400,
+            showlegend=False  # 凡例を非表示にする
         )
-
-        # 特定の日付の範囲を強調
-        if selected_year and selected_month and selected_day:
-            selected_date = datetime(int(selected_year), int(selected_month), int(selected_day))
-            fig.update_xaxes(
-                range=[
-                    selected_date.replace(hour=0, minute=0, second=0),
-                    selected_date.replace(hour=23, minute=59, second=59)
-                ],
-                tickformat="%H:%M"
-            )
 
         return fig
 
 
 
     
+    # 英語のアクティビティタイプを日本語に変換するマッピング辞書
+    activity_type_mapping = {
+        'grammar': '文法',
+        'listening': 'リスニング',
+        'pronunciation': '発音',
+        'speaking': 'スピーキング'
+    }
+
     @app.callback(
         Output('ordered-learning-line-graph', 'figure'),
         [
@@ -622,7 +648,7 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             return {
                 'data': [],
                 'layout': {
-                    'title': '学習履歴順序',
+                    'title': '学習履歴順序 (リセット済み)',
                     'xaxis': {'title': "学習順序 (順番)"},
                     'yaxis': {'title': "ユニット番号"},
                     'height': 600,
@@ -631,11 +657,12 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             }
 
         # データがない場合
-        if not click_data or not all_extracted_data:
+        if not click_data or 'points' not in click_data:
+            print(f"Click data is invalid: {click_data}")
             return {'data': [], 'layout': {'title': 'No data available'}}
 
-        # クリックされたデータポイントから学習者IDを抽出
-        selected_id = click_data['points'][0]['customdata']
+        selected_id = click_data['points'][0].get('customdata')
+        print(f"Selected ID: {selected_id}")
 
         # 指定された学習者、年度、クラスのデータをフィルタリング
         filtered_data = [
@@ -646,12 +673,18 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         ]
 
         if not filtered_data:
+            print(f"Filtered data is empty for selected_id={selected_id}, year={selected_year}, class={selected_class}")
             return {'data': [], 'layout': {'title': 'No data available'}}
+
+        print(f"Filtered data: {filtered_data}")
 
         # データフレーム生成
         df = pd.DataFrame(filtered_data)
         df['UnitNumber'] = pd.to_numeric(df['UnitNumber'], errors='coerce')
         df = df.dropna(subset=['UnitNumber'])
+
+        # アクティビティタイプを日本語に変換
+        df['ActivityType'] = df['ActivityType'].map(activity_type_mapping).fillna(df['ActivityType'])
 
         # グラフの描画
         if order_selection == '全体':
@@ -673,6 +706,7 @@ def register_callbacks(app, calculated_results, all_extracted_data):
             title = f"形式別の学習履歴順序 - 年度: {selected_year}, クラス: {selected_class or '全体'}"
             fig = go.Figure()
             if selected_activity:
+                selected_activity = activity_type_mapping.get(selected_activity, selected_activity)  # 日本語に変換
                 df = df[df['ActivityType'] == selected_activity]
                 if df.empty:
                     return {'data': [], 'layout': {'title': 'No data available'}}
@@ -690,18 +724,39 @@ def register_callbacks(app, calculated_results, all_extracted_data):
 
         # 行き戻りの処理
         if toggle_backtracking == 'show':
-            for i in range(1, len(df)):
-                if df['UnitNumber'].iloc[i] < df['UnitNumber'].iloc[i - 1]:
-                    fig.add_trace(
-                        go.Scatter(
-                            x=[df[x_axis].iloc[i - 1], df[x_axis].iloc[i]],
-                            y=[df['UnitNumber'].iloc[i - 1], df['UnitNumber'].iloc[i]],
-                            mode='lines+markers',
-                            line=dict(color='red', width=2, dash='dash'),
-                            marker=dict(color='red', size=8),
-                            showlegend=False
+            if order_selection == '全体':  # 全体順序の場合
+                for i in range(1, len(df)):
+                    if df['UnitNumber'].iloc[i] < df['UnitNumber'].iloc[i - 1]:
+                        fig.add_trace(
+                            go.Scatter(
+                                x=[df[x_axis].iloc[i - 1], df[x_axis].iloc[i]],
+                                y=[df['UnitNumber'].iloc[i - 1], df['UnitNumber'].iloc[i]],
+                                mode='lines+markers',
+                                line=dict(color='red', width=2, dash='dash'),
+                                marker=dict(color='red', size=8),
+                                showlegend=False
+                            )
                         )
-                    )
+            else:  # 形式別順序の場合
+                if selected_activity:
+                    activity_groups = [selected_activity]
+                else:
+                    activity_groups = df['ActivityType'].unique()
+
+                for activity_type in activity_groups:
+                    activity_df = df[df['ActivityType'] == activity_type]
+                    for i in range(1, len(activity_df)):
+                        if activity_df['UnitNumber'].iloc[i] < activity_df['UnitNumber'].iloc[i - 1]:
+                            fig.add_trace(
+                                go.Scatter(
+                                    x=[activity_df[x_axis].iloc[i - 1], activity_df[x_axis].iloc[i]],
+                                    y=[activity_df['UnitNumber'].iloc[i - 1], activity_df['UnitNumber'].iloc[i]],
+                                    mode='lines+markers',
+                                    line=dict(color='red', width=2, dash='dash'),
+                                    marker=dict(color='red', size=8),
+                                    showlegend=False
+                                )
+                            )
 
         # レイアウト設定
         fig.update_layout(
@@ -714,7 +769,6 @@ def register_callbacks(app, calculated_results, all_extracted_data):
         )
 
         return fig
-
 
 
 
